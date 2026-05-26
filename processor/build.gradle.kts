@@ -1,13 +1,10 @@
 plugins {
     kotlin("jvm") version "2.0.20"
-
-    `java-library`
-    `maven-publish`
-    signing
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
 group = "io.github.nastyoonaa"
-version = "0.1.0"
+version = "0.1.1"
 
 repositories {
     mavenCentral()
@@ -23,60 +20,63 @@ kotlin {
     jvmToolchain(17)
 }
 
-java {
-    withSourcesJar()
-    withJavadocJar()
-}
-
 tasks.test {
     useJUnitPlatform()
 }
+mavenPublishing {
 
-publishing {
-    publications {
-        create<MavenPublication>("processor") {
-
-            from(components["java"])
-
-            groupId = "io.github.nastyoonaa"
-            artifactId = "idiomatic-architecture-viewer-processor"
-            version = "0.1.0"
-
-            pom {
-                name.set("Idiomatic Architecture Viewer Processor")
-                description.set("KSP processor for architecture analysis and UML generation")
-                url.set("https://github.com/Nastyoonaa/idiomatic-architecture-viewer")
-
-                licenses {
-                    license {
-                        name.set("MIT License")
-                        url.set("https://opensource.org/licenses/MIT")
-                    }
-                }
-
-                developers {
-                    developer {
-                        id.set("nastyoonaa")
-                        name.set("Анастасия Ципенюк")
-                    }
-                }
-
-                scm {
-                    connection.set("scm:git:git://github.com/Nastyoonaa/idiomatic-architecture-viewer.git")
-                    developerConnection.set("scm:git:ssh://github.com/Nastyoonaa/idiomatic-architecture-viewer.git")
-                    url.set("https://github.com/Nastyoonaa/idiomatic-architecture-viewer")
-                }
-            }
-        }
-    }
-}
-
-signing {
-
-    useInMemoryPgpKeys(
-        providers.gradleProperty("signingInMemoryKey").orNull,
-        providers.gradleProperty("signingInMemoryKeyPassword").orNull
+    configure(
+        com.vanniktech.maven.publish.KotlinJvm()
     )
 
-    sign(publishing.publications["processor"])
+    publishToMavenCentral()
+
+    signAllPublications()
+
+    coordinates(
+        "io.github.nastyoonaa",
+        "idiomatic-architecture-viewer-processor",
+        "0.1.0"
+    )
+
+    pom {
+
+        name.set("Idiomatic Architecture Viewer Processor")
+
+        description.set(
+            "KSP processor for architecture analysis and UML generation"
+        )
+
+        url.set(
+            "https://github.com/Nastyoonaa/idiomatic-architecture-viewer"
+        )
+
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://opensource.org/licenses/MIT")
+            }
+        }
+
+        developers {
+            developer {
+                id.set("nastyoonaa")
+                name.set("Анастасия Ципенюк")
+            }
+        }
+
+        scm {
+            connection.set(
+                "scm:git:git://github.com/Nastyoonaa/idiomatic-architecture-viewer.git"
+            )
+
+            developerConnection.set(
+                "scm:git:ssh://github.com/Nastyoonaa/idiomatic-architecture-viewer.git"
+            )
+
+            url.set(
+                "https://github.com/Nastyoonaa/idiomatic-architecture-viewer"
+            )
+        }
+    }
 }
