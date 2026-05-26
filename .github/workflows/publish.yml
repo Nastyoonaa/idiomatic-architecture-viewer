@@ -1,11 +1,38 @@
 name: Publish to Maven Central
 
 on:
+  push:
+    branches: [ "main" ]
   workflow_dispatch:
 
+env:
+  ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+  ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+
+  ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY_CONTENTS }}
+  ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+
 jobs:
-  test:
+  publish:
     runs-on: ubuntu-latest
 
     steps:
-      - run: echo "hello"
+      - uses: actions/checkout@v3
+
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
+      - name: Publish
+        run: |
+          ./gradlew publishAndReleaseToMavenCentral \
+            -x ktlintCheck \
+            -x ktlintMainSourceSetCheck \
+            -x ktlintKotlinScriptCheck \
+            -x runKtlintCheckOverMainSourceSet \
+            -x runKtlintCheckOverKotlinScripts
