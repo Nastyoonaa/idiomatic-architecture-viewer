@@ -20,8 +20,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.1")
     implementation("org.json:json:20240303")
     implementation(kotlin("stdlib"))
-    implementation(project(":processor"))
-    ksp(project(":processor"))
 }
 
 kotlin {
