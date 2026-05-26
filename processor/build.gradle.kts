@@ -36,7 +36,7 @@ mavenPublishing {
     coordinates(
         "io.github.nastyoonaa",
         "idiomatic-architecture-viewer-processor",
-        "0.1.0"
+        "0.1.1"
     )
 
     pom {
