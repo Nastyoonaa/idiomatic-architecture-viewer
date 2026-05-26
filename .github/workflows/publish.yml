@@ -1,7 +1,19 @@
 name: Publish to Maven Central
 
 on:
+  push:
+    branches: [ "main" ]
+
   workflow_dispatch:
+
+env:
+  ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+
+  ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+
+  ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
+
+  ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
 
 jobs:
 
@@ -9,17 +21,9 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    env:
-      ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
-      ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
-
-      SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
-      SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
-
     steps:
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup JDK
         uses: actions/setup-java@v4
@@ -27,8 +31,12 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
       - name: Grant execute permission
         run: chmod +x gradlew
 
       - name: Publish
-        run: ./gradlew publishAndReleaseToMavenCentral
+        run: |
+          ./gradlew publishAndReleaseToMavenCentral
