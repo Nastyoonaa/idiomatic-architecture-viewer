@@ -26,10 +26,6 @@ dependencies {
     implementation("org.json:json:20240303")
 
     implementation(kotlin("stdlib"))
-
-    implementation(project(":processor"))
-
-    ksp(project(":processor"))
 }
 
 kotlin {
