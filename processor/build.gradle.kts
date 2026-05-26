@@ -72,5 +72,11 @@ publishing {
 }
 
 signing {
+
+    useInMemoryPgpKeys(
+        providers.gradleProperty("signingInMemoryKey").orNull,
+        providers.gradleProperty("signingInMemoryKeyPassword").orNull
+    )
+
     sign(publishing.publications["processor"])
 }
