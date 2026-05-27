@@ -28,8 +28,15 @@ class ArchitectureHtmlExporter {
         'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
 
         mermaid.initialize({
-            startOnLoad: true
-        });
+        startOnLoad: true,
+        securityLevel: 'loose',
+    
+        flowchart: {
+            useMaxWidth: false,
+            nodeSpacing: 80,
+            rankSpacing: 140
+        }
+    });
 
     </script>
 
@@ -85,12 +92,22 @@ class ArchitectureHtmlExporter {
         }
 
         .graphContainer {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin-top: 32px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 32px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+
+    overflow-x: auto;
+    overflow-y: auto;
+}
+.graphContainer svg {
+    min-width: 2500px;
+    height: auto;
+}
+.graphContainer {
+    max-height: 90vh;
+}
 
         a {
             color: #6C43F3;
