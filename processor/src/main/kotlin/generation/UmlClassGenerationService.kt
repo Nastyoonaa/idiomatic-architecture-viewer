@@ -24,8 +24,7 @@ class UmlClassGenerationService(
     private val umlDependencyCodeBuilder:
     UmlDependencyCodeBuilder,
 
-    private val fileWriter:
-    GeneratedFileWriter,
+    private val fileWriter: GeneratedFileWriter,
 
     private val shouldGenerate:
         (String) -> Boolean

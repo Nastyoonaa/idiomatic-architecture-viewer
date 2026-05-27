@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "io.github.nastyoonaa"
-version = "0.1.3"
+version = "0.1.4"
 
 repositories {
     mavenCentral()
@@ -36,7 +36,7 @@ mavenPublishing {
     coordinates(
         "io.github.nastyoonaa",
         "idiomatic-architecture-viewer-processor",
-        "0.1.3"
+        "0.1.4"
     )
 
     pom {

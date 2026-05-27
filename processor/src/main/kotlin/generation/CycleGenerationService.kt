@@ -13,8 +13,8 @@ class CycleGenerationService(
     private val cycleReportGenerator:
     CycleReportGenerator,
 
-    private val fileWriter:
-    GeneratedFileWriter,
+    private val fileWriter: GeneratedFileWriter,
+
 
     private val shouldGenerate:
         (String) -> Boolean

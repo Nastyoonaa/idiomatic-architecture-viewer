@@ -21,8 +21,7 @@ class MetricsGenerationService(
     private val classMetricsReportGenerator:
     ClassMetricsReportGenerator,
 
-    private val fileWriter:
-    GeneratedFileWriter,
+    private val fileWriter: GeneratedFileWriter,
 
     private val shouldGenerate:
         (String) -> Boolean

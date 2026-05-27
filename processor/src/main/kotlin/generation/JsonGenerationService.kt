@@ -15,8 +15,7 @@ class JsonGenerationService(
     private val architectureJsonExporter:
     ArchitectureJsonExporter,
 
-    private val fileWriter:
-    GeneratedFileWriter,
+    private val fileWriter: GeneratedFileWriter,
 
     private val shouldGenerate:
         (String) -> Boolean
