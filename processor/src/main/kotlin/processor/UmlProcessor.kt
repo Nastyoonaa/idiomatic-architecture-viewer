@@ -215,7 +215,7 @@ class UmlProcessor(
         val symbols =
             resolver
                 .getSymbolsWithAnnotation(
-                    "com.example.processor.UmlDiagram"
+                    "uml.UmlDiagram"
                 )
                 .filterIsInstance<KSClassDeclaration>()
 
