@@ -31,7 +31,8 @@ class UmlClassGenerationService(
 ) {
 
     fun generateUml(
-        classDeclaration: KSClassDeclaration
+        classDeclaration: KSClassDeclaration,
+        projectClasses: Set<String>
     ) {
 
         val className =
@@ -83,11 +84,11 @@ class UmlClassGenerationService(
                 .extract(classDeclaration)
 
         val dependencies =
-            umlDependencyExtractor
-                .extract(
-                    classDeclaration,
-                    className
-                )
+            umlDependencyExtractor.extract(
+                classDeclaration,
+                className,
+                projectClasses
+            )
 
         val dependenciesCode =
             umlDependencyCodeBuilder

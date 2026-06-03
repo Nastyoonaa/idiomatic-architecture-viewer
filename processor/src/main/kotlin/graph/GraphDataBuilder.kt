@@ -1,48 +1,10 @@
-package export
+package export.graph
 
 import architecture.ArchitectureProject
-import architecture.html.HtmlHeaderBuilder
-import architecture.html.ProjectTreeBuilder
-import architecture.html.ScriptBuilder
-import export.builder.GraphSectionBuilder
 
-class ArchitectureHtmlExporter {
+object GraphDataBuilder {
 
-    fun export(
-        project: ArchitectureProject,
-        mermaidGraph: String
-    ): String {
-
-        val graphData =
-            buildGraphData(project)
-
-        return buildString {
-
-            append(
-                HtmlHeaderBuilder.build()
-            )
-
-            append(
-                ProjectTreeBuilder.build(
-                    project
-                )
-            )
-
-            append(
-                GraphSectionBuilder.build(
-                    mermaidGraph
-                )
-            )
-
-            append(
-                ScriptBuilder.build(
-                    graphData
-                )
-            )
-        }
-    }
-
-    private fun buildGraphData(
+    fun build(
         project: ArchitectureProject
     ): String {
 

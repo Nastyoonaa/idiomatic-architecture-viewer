@@ -91,10 +91,10 @@ class ArchitectureGraphGenerator {
                                     if (targetPackage != pkg.name) {
 
                                         val fromId =
-                                            pkg.name.safe()
+                                            clazz.simpleName.asString().safe()
 
                                         val toId =
-                                            targetPackage.safe()
+                                            dependencyClass.simpleName.asString().safe()
 
                                         dependencyEdges +=
                                             "$fromId -.-> $toId"
@@ -118,4 +118,6 @@ class ArchitectureGraphGenerator {
             .replace("-", "_")
             .replace(" ", "_")
     }
+
 }
+

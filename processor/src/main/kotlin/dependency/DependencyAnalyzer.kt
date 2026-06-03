@@ -5,38 +5,97 @@ import com.google.devtools.ksp.symbol.KSClassDeclaration
 
 class DependencyAnalyzer {
 
-    fun extractMethodDependencies(
-        clazz: KSClassDeclaration,
-        className: String
+    fun extractDependencies(
+        clazz: KSClassDeclaration
     ): List<String> {
 
-        return clazz
-            .getDeclaredFunctions()
-            .flatMap { function ->
+        val className =
+            clazz.simpleName.asString()
 
-                function.parameters
+        val dependencies =
+            buildSet {
+
+                //
+                // constructor
+                //
+
+                clazz.primaryConstructor
+                    ?.parameters
+                    .orEmpty()
                     .mapNotNull {
-
                         it.type.resolve()
                             .declaration as? KSClassDeclaration
                     }
+                    .forEach(::add)
+
+                //
+                // properties
+                //
+
+                clazz.getAllProperties()
+                    .mapNotNull {
+                        it.type.resolve()
+                            .declaration as? KSClassDeclaration
+                    }
+                    .forEach(::add)
+
+                //
+                // method parameters
+                //
+
+                clazz.getDeclaredFunctions()
+                    .flatMap { function ->
+
+                        function.parameters
+                            .mapNotNull {
+                                it.type.resolve()
+                                    .declaration as? KSClassDeclaration
+                            }
+                    }
+                    .forEach(::add)
+
+                //
+                // return types
+                //
+
+                clazz.getDeclaredFunctions()
+                    .mapNotNull { function ->
+
+                        function.returnType
+                            ?.resolve()
+                            ?.declaration as? KSClassDeclaration
+                    }
+                    .forEach(::add)
+
+                //
+                // inheritance
+                //
+
+                clazz.superTypes
+                    .mapNotNull { superType ->
+
+                        superType.resolve()
+                            .declaration as? KSClassDeclaration
+                    }
+                    .forEach(::add)
             }
+
+        return dependencies
             .distinctBy {
-                it.simpleName.asString()
+                it.qualifiedName?.asString()
             }
             .filter {
                 it.simpleName.asString() != className
             }
-            .map {
+            .map { dependency ->
 
                 """
 UmlDependency(
     "$className",
-    "${it.simpleName.asString()}",
+    "${dependency.simpleName.asString()}",
     "-->"
 )
                 """.trimIndent()
             }
-            .toList()
     }
 }

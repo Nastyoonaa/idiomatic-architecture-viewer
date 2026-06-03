@@ -2,14 +2,18 @@ package dependency
 
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import config.ArchitectureAnalysisConfig
 
 class UmlDependencyExtractor(
-    private val dependencyAnalyzer: DependencyAnalyzer
+    private val dependencyAnalyzer: DependencyAnalyzer,
+    private val importDependencyAnalyzer: ImportDependencyAnalyzer,
+    private val config: ArchitectureAnalysisConfig
 ) {
 
     fun extract(
         classDeclaration: KSClassDeclaration,
-        className: String
+        className: String,
+        projectClasses: Set<String>
     ): List<String> {
 
         return buildList {
@@ -58,9 +62,8 @@ class UmlDependencyExtractor(
 
             addAll(
                 dependencyAnalyzer
-                    .extractMethodDependencies(
-                        classDeclaration,
-                        className
+                    .extractDependencies(
+                        classDeclaration
                     )
             )
 
@@ -104,6 +107,16 @@ class UmlDependencyExtractor(
                         )""".trimIndent()
                     )
                 }
+            if (config.includeImportDependencies) {
+
+                addAll(
+                    importDependencyAnalyzer
+                        .extractDependencies(
+                            classDeclaration,
+                            projectClasses
+                        )
+                )
+            }
         }.distinct()
     }
 }

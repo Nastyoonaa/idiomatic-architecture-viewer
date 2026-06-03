@@ -9,7 +9,9 @@ import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.validate
+import config.ArchitectureAnalysisConfig
 import dependency.DependencyAnalyzer
+import dependency.ImportDependencyAnalyzer
 import dependency.UmlDependencyExtractor
 import diagram.*
 import export.*
@@ -54,7 +56,11 @@ class UmlProcessor(
     //
     // UML
     //
+    private val importDependencyAnalyzer = ImportDependencyAnalyzer()
 
+    private val config = ArchitectureAnalysisConfig(
+            includeImportDependencies = true
+        )
     private val umlClassGenerationService =
         UmlClassGenerationService(
 
@@ -66,7 +72,14 @@ class UmlProcessor(
 
             umlDependencyExtractor =
                 UmlDependencyExtractor(
-                    dependencyAnalyzer
+                    dependencyAnalyzer =
+                        dependencyAnalyzer,
+
+                    importDependencyAnalyzer =
+                        importDependencyAnalyzer,
+
+                    config =
+                        config
                 ),
 
             umlDependencyCodeBuilder =
@@ -259,9 +272,19 @@ class UmlProcessor(
         // GENERATION
         //
 
+        val projectClasses =
+            allClasses
+                .map {
+                    it.simpleName.asString()
+                }
+                .toSet()
+
         allClasses.forEach {
             umlClassGenerationService
-                .generateUml(it)
+                .generateUml(
+                    it,
+                    projectClasses
+                )
         }
 
         diagramGenerationService
