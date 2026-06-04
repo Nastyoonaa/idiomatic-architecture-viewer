@@ -113,7 +113,8 @@ class UmlProcessor(
 
             classHtmlExporter =
                 ClassHtmlExporter(
-                    dependencyAnalyzer
+                    dependencyAnalyzer,
+                    importDependencyAnalyzer
                 ),
 
             fileWriter =

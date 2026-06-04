@@ -120,7 +120,12 @@ class HtmlGenerationService(
     fun generateClassHtmlPages(
         classes: List<KSClassDeclaration>
     ) {
-
+        val projectClasses =
+            classes
+                .map {
+                    it.simpleName.asString()
+                }
+                .toSet()
         classes
             .distinctBy {
                 it.qualifiedName?.asString()
@@ -140,8 +145,10 @@ class HtmlGenerationService(
 
                 val html =
                     classHtmlExporter
-                        .export(clazz)
-
+                        .export(
+                            clazz,
+                            projectClasses
+                        )
                 fileWriter.writeText(
                     packageName =
                         "com.example.generated.architecture",

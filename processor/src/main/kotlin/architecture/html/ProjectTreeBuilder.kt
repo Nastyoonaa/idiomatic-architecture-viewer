@@ -86,7 +86,12 @@ ${module.sourceSets.size}
 >
 
 <span>
-📦 ${pkg.name}
+📦 ${'$'}{
+    pkg.name
+        .split(".")
+        .takeLast(2)
+        .joinToString(".")
+}
 </span>
 
 <span class="sidebarBadge">
@@ -96,6 +101,27 @@ ${pkg.classes.size}
 </a>
 """
                         )
+
+                        pkg.classes.forEach { clazz ->
+
+                            val className =
+                                clazz.simpleName.asString()
+
+                            appendLine(
+                                """
+<a
+    href="$className.html"
+    class="sidebarItem packageLevel2"
+>
+
+<span>
+📄 $className
+</span>
+
+</a>
+"""
+                            )
+                        }
                     }
                 }
             }

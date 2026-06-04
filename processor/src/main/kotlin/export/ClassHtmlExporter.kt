@@ -2,13 +2,16 @@ package export
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import dependency.DependencyAnalyzer
+import dependency.ImportDependencyAnalyzer
 
 class ClassHtmlExporter(
-    private val dependencyAnalyzer: DependencyAnalyzer
+    private val dependencyAnalyzer: DependencyAnalyzer,
+    private val importDependencyAnalyzer: ImportDependencyAnalyzer,
 ) {
 
     fun export(
-        clazz: KSClassDeclaration
+        clazz: KSClassDeclaration,
+        projectClasses: Set<String>
     ): String {
 
         val className =
@@ -28,7 +31,19 @@ class ClassHtmlExporter(
                 .distinctBy {
                     it.qualifiedName?.asString()
                 }
-
+        val importDependencies =
+            importDependencyAnalyzer
+                .extractImportedClassNames(
+                    clazz,
+                    projectClasses
+                )
+        val dependencyNames =
+            dependencies
+                .map {
+                    it.simpleName.asString()
+                }
+                .plus(importDependencies)
+                .distinct()
         val methods =
             clazz.getAllFunctions()
                 .map {
@@ -67,10 +82,7 @@ class ClassHtmlExporter(
                 // DEPENDENCIES
                 //
 
-                dependencies.forEach { dependency ->
-
-                    val dependencyName =
-                        dependency.simpleName.asString()
+                dependencyNames.forEach { dependencyName ->
 
                     appendLine(
                         "$dependencyName[$dependencyName]"
@@ -176,10 +188,7 @@ $packageName
 """
             )
 
-            dependencies.forEach { dependency ->
-
-                val dependencyName =
-                    dependency.simpleName.asString()
+            dependencyNames.forEach { dependencyName ->
 
                 appendLine(
                     """
