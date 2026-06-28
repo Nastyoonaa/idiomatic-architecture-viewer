@@ -21,6 +21,8 @@ import metrics.MetricsCalculator
 import uml.UmlDependencyCodeBuilder
 import uml.UmlMethodExtractor
 import uml.UmlPropertyExtractor
+import viewer.ViewerDataBuilder
+import viewer.ViewerJsonEncoder
 import writer.GeneratedFileWriter
 
 class UmlProcessor(
@@ -98,13 +100,6 @@ class UmlProcessor(
 
     private val htmlGenerationService =
         HtmlGenerationService(
-
-            architectureTreeBuilder =
-                ArchitectureTreeBuilder(),
-
-            architectureGraphGenerator =
-                ArchitectureGraphGenerator(),
-
             architectureHtmlExporter =
                 ArchitectureHtmlExporter(),
 
@@ -116,6 +111,12 @@ class UmlProcessor(
                     dependencyAnalyzer,
                     importDependencyAnalyzer
                 ),
+
+            viewerDataBuilder =
+                ViewerDataBuilder(),
+
+            viewerJsonEncoder =
+                ViewerJsonEncoder(),
 
             fileWriter =
                 fileWriter,

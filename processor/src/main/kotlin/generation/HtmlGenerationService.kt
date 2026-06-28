@@ -1,21 +1,19 @@
 package generation
 
-import com.example.architecture.ArchitectureTreeBuilder
 import com.google.devtools.ksp.symbol.KSClassDeclaration
-import detector.ModuleDetector
-import detector.SourceSetDetector
-import diagram.ArchitectureGraphGenerator
 import export.ArchitectureHtmlExporter
 import export.ClassHtmlExporter
 import export.PackageHtmlExporter
+import viewer.ViewerDataBuilder
+import viewer.ViewerJsonEncoder
 import writer.GeneratedFileWriter
 
 class HtmlGenerationService(
-    private val architectureTreeBuilder: ArchitectureTreeBuilder,
-    private val architectureGraphGenerator: ArchitectureGraphGenerator,
     private val architectureHtmlExporter: ArchitectureHtmlExporter,
     private val packageHtmlExporter: PackageHtmlExporter,
     private val classHtmlExporter: ClassHtmlExporter,
+    private val viewerDataBuilder: ViewerDataBuilder,
+    private val viewerJsonEncoder: ViewerJsonEncoder,
     private val fileWriter: GeneratedFileWriter,
     private val shouldGenerate: (String) -> Boolean
 ) {
@@ -34,26 +32,15 @@ class HtmlGenerationService(
             return
         }
 
-        val tree =
-            architectureTreeBuilder.build(
-                classes = classes,
-                detectModuleName = {
-                    ModuleDetector.detect(it)
-                },
-                detectSourceSet = {
-                    SourceSetDetector.detect(it)
-                }
-            )
-
-        val mermaidGraph =
-            architectureGraphGenerator
-                .generate(tree)
-
         val html =
             architectureHtmlExporter
                 .export(
-                    project = tree,
-                    mermaidGraph = mermaidGraph
+                    viewerDataJson =
+                        viewerJsonEncoder.encode(
+                            viewerDataBuilder.build(
+                                classes
+                            )
+                        )
                 )
 
         fileWriter.writeText(

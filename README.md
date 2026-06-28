@@ -224,7 +224,20 @@ idiomatic-architecture-viewer
 
 # Installation
 
-## Gradle
+The annotation API is intentionally small. In source code you always use the
+same annotation:
+
+```kotlin
+import uml.UmlDiagram
+
+@UmlDiagram
+class UserService
+```
+
+The Gradle setup is different for JVM-only and Kotlin Multiplatform projects.
+Use the same `VERSION` for all Idiomatic Architecture Viewer artifacts.
+
+## JVM Project
 
 ```kotlin
 plugins {
@@ -233,15 +246,79 @@ plugins {
 }
 
 dependencies {
-
     implementation(
-        "io.github.nastyoonaa:idiomatic-architecture-viewer:0.1.0"
+        "io.github.nastyoonaa:idiomatic-architecture-viewer:VERSION"
     )
 
     ksp(
-        "io.github.nastyoonaa:idiomatic-architecture-viewer-processor:0.1.0"
+        "io.github.nastyoonaa:idiomatic-architecture-viewer-processor:VERSION"
     )
 }
+```
+
+## Kotlin Multiplatform Project
+
+Use the multiplatform annotations artifact from `commonMain`. The KSP processor
+still runs only during Gradle compilation.
+
+```kotlin
+plugins {
+    kotlin("multiplatform")
+    id("com.android.library")
+    id("com.google.devtools.ksp")
+}
+
+kotlin {
+    androidTarget()
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
+
+    sourceSets {
+        commonMain.dependencies {
+            implementation(
+                "io.github.nastyoonaa:idiomatic-architecture-viewer-annotations:VERSION"
+            )
+        }
+    }
+}
+
+dependencies {
+    add(
+        "kspCommonMainMetadata",
+        "io.github.nastyoonaa:idiomatic-architecture-viewer-processor:VERSION"
+    )
+
+    add(
+        "kspAndroid",
+        "io.github.nastyoonaa:idiomatic-architecture-viewer-processor:VERSION"
+    )
+
+    add(
+        "kspIosX64",
+        "io.github.nastyoonaa:idiomatic-architecture-viewer-processor:VERSION"
+    )
+
+    add(
+        "kspIosArm64",
+        "io.github.nastyoonaa:idiomatic-architecture-viewer-processor:VERSION"
+    )
+
+    add(
+        "kspIosSimulatorArm64",
+        "io.github.nastyoonaa:idiomatic-architecture-viewer-processor:VERSION"
+    )
+}
+```
+
+For Kotlin Multiplatform, the generated static viewer appears under the KSP
+output of each target, for example:
+
+```text
+build/generated/ksp/metadata/commonMain/resources/com/example/generated/architecture/architecture.html
+build/generated/ksp/android/androidDebug/resources/com/example/generated/architecture/architecture.html
+build/generated/ksp/iosX64/iosX64Main/resources/com/example/generated/architecture/architecture.html
+build/generated/ksp/iosSimulatorArm64/iosSimulatorArm64Main/resources/com/example/generated/architecture/architecture.html
 ```
 
 ---
@@ -251,6 +328,8 @@ dependencies {
 Annotate classes:
 
 ```kotlin
+import uml.UmlDiagram
+
 @UmlDiagram
 class UserService(
     private val repository: UserRepository
@@ -268,6 +347,8 @@ Generated files will appear in:
 ```text
 build/generated/ksp/
 ```
+
+Open `architecture.html` in a browser to inspect the generated static viewer.
 
 ---
 
@@ -333,6 +414,17 @@ Planned features:
 # Publishing
 
 Artifacts are published to Maven Central.
+
+Published artifacts:
+
+```text
+io.github.nastyoonaa:idiomatic-architecture-viewer
+io.github.nastyoonaa:idiomatic-architecture-viewer-processor
+io.github.nastyoonaa:idiomatic-architecture-viewer-annotations
+```
+
+Release CI validates the project first and then publishes all configured
+Maven Central publications.
 
 ---
 
