@@ -1,5 +1,5 @@
 plugins {
-    kotlin("jvm") version "2.0.20"
+    kotlin("multiplatform")
     id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
@@ -10,23 +10,18 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-    compileOnly("com.google.devtools.ksp:symbol-processing-api:2.0.20-1.0.25")
-    implementation("net.sourceforge.plantuml:plantuml:1.2024.6")
-    testImplementation(kotlin("test"))
-}
-
 kotlin {
     jvmToolchain(17)
+
+    jvm()
+    iosArm64()
+    iosX64()
+    iosSimulatorArm64()
 }
 
-tasks.test {
-    useJUnitPlatform()
-}
 mavenPublishing {
-
     configure(
-        com.vanniktech.maven.publish.KotlinJvm()
+        com.vanniktech.maven.publish.KotlinMultiplatform()
     )
 
     publishToMavenCentral()
@@ -35,16 +30,15 @@ mavenPublishing {
 
     coordinates(
         "io.github.nastyoonaa",
-        "idiomatic-architecture-viewer-processor",
+        "idiomatic-architecture-viewer-annotations",
         version.toString()
     )
 
     pom {
-
-        name.set("Idiomatic Architecture Viewer Processor")
+        name.set("Idiomatic Architecture Viewer Annotations")
 
         description.set(
-            "KSP processor for architecture analysis and UML generation"
+            "Multiplatform annotations and generated model API for Idiomatic Architecture Viewer"
         )
 
         url.set(
