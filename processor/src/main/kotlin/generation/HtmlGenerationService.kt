@@ -1,6 +1,7 @@
 package generation
 
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import export.ArchitectureHtmlExporter
 import export.ClassHtmlExporter
 import export.PackageHtmlExporter
@@ -19,11 +20,15 @@ class HtmlGenerationService(
 ) {
 
     fun generateArchitectureHtml(
-        classes: List<KSClassDeclaration>
+        classes: List<KSClassDeclaration>,
+        functions: List<KSFunctionDeclaration> = emptyList(),
+        projectClasses: List<KSClassDeclaration> = classes
     ) {
 
         if (
             classes.isEmpty()
+            &&
+            functions.isEmpty()
             ||
             !shouldGenerate(
                 "ArchitectureHtml"
@@ -38,7 +43,9 @@ class HtmlGenerationService(
                     viewerDataJson =
                         viewerJsonEncoder.encode(
                             viewerDataBuilder.build(
-                                classes
+                                classes = classes,
+                                functions = functions,
+                                projectClasses = projectClasses
                             )
                         )
                 )
