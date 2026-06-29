@@ -44,11 +44,19 @@ class ViewerJsonEncoder {
         append(",")
         appendField("kind", node.kind)
         append(",")
+        appendField("origin", node.origin)
+        append(",")
+        appendField("resolved", node.resolved)
+        append(",")
         appendField("layer", node.layer)
         append(",")
         appendField("methods", node.methods)
         append(",")
         appendField("properties", node.properties)
+        append(",")
+        appendField("isComposable", node.isComposable)
+        append(",")
+        appendField("platformModifier", node.platformModifier)
         append(",")
         appendField("fanIn", node.fanIn)
         append(",")
@@ -128,6 +136,16 @@ class ViewerJsonEncoder {
     private fun StringBuilder.appendField(
         name: String,
         value: Int
+    ) {
+        append("\"")
+        append(escape(name))
+        append("\":")
+        append(value)
+    }
+
+    private fun StringBuilder.appendField(
+        name: String,
+        value: Boolean
     ) {
         append("\"")
         append(escape(name))

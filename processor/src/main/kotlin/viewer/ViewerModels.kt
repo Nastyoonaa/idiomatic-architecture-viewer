@@ -15,9 +15,13 @@ data class ViewerNode(
     val sourceSetName: String,
     val fileName: String,
     val kind: String,
+    val origin: String,
+    val resolved: Boolean,
     val layer: String,
     val methods: Int,
     val properties: Int,
+    val isComposable: Boolean,
+    val platformModifier: String,
     val fanIn: Int,
     val fanOut: Int
 )

@@ -8,6 +8,7 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.validate
 import config.ArchitectureAnalysisConfig
 import dependency.DependencyAnalyzer
@@ -21,6 +22,9 @@ import metrics.MetricsCalculator
 import uml.UmlDependencyCodeBuilder
 import uml.UmlMethodExtractor
 import uml.UmlPropertyExtractor
+import viewer.DeclarationDependencyCollector
+import viewer.ImportDependencyCollector
+import viewer.ProjectSymbolIndexBuilder
 import viewer.ViewerDataBuilder
 import viewer.ViewerJsonEncoder
 import writer.GeneratedFileWriter
@@ -111,6 +115,15 @@ class UmlProcessor(
                     dependencyAnalyzer,
                     importDependencyAnalyzer
                 ),
+
+            projectSymbolIndexBuilder =
+                ProjectSymbolIndexBuilder(),
+
+            declarationDependencyCollector =
+                DeclarationDependencyCollector(),
+
+            importDependencyCollector =
+                ImportDependencyCollector(),
 
             viewerDataBuilder =
                 ViewerDataBuilder(),
@@ -232,7 +245,7 @@ class UmlProcessor(
                 .getSymbolsWithAnnotation(
                     "uml.UmlDiagram"
                 )
-                .filterIsInstance<KSClassDeclaration>()
+                .toList()
 
         val invalid =
             symbols
@@ -250,8 +263,33 @@ class UmlProcessor(
 
         val allClasses =
             valid
+                .filterIsInstance<KSClassDeclaration>()
                 .filter {
                     it.containingFile != null
+                }
+                .distinctBy {
+
+                    buildString {
+                        append(
+                            it.qualifiedName
+                                ?.asString()
+                        )
+
+                        append(":")
+
+                        append(
+                            it.containingFile
+                                ?.filePath
+                        )
+                    }
+                }
+
+        val allFunctions =
+            valid
+                .filterIsInstance<KSFunctionDeclaration>()
+                .filter {
+                    it.containingFile != null &&
+                        it.qualifiedName != null
                 }
                 .distinctBy {
 
@@ -316,7 +354,9 @@ class UmlProcessor(
 
         htmlGenerationService
             .generateArchitectureHtml(
-                allClasses
+                allClasses,
+                allFunctions,
+                resolver
             )
 
         htmlGenerationService
