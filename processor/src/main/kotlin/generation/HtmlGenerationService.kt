@@ -1,7 +1,7 @@
 package generation
 
-import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.processing.Resolver
+import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import export.ArchitectureHtmlExporter
 import export.ClassHtmlExporter

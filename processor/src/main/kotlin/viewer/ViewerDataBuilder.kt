@@ -122,6 +122,14 @@ class ViewerDataBuilder {
         }
 
         return when {
+            isComposable &&
+                platformModifier == ProjectSymbolPlatformModifier.EXPECT ->
+                "expect-composable-function"
+
+            isComposable &&
+                platformModifier == ProjectSymbolPlatformModifier.ACTUAL ->
+                "actual-composable-function"
+
             isComposable ->
                 "composable-function"
 

@@ -232,6 +232,10 @@ import uml.UmlDiagram
 
 @UmlDiagram
 class UserService
+
+@UmlDiagram
+fun UserScreen() {
+}
 ```
 
 The Gradle setup is different for JVM-only and Kotlin Multiplatform projects.
@@ -325,7 +329,7 @@ build/generated/ksp/iosSimulatorArm64/iosSimulatorArm64Main/resources/com/exampl
 
 # Usage
 
-Annotate classes:
+Annotate classes, objects, interfaces, or top-level functions:
 
 ```kotlin
 import uml.UmlDiagram
@@ -334,7 +338,21 @@ import uml.UmlDiagram
 class UserService(
     private val repository: UserRepository
 )
+
+@UmlDiagram
+fun UserScreen(
+    service: UserService
+) {
+}
 ```
+
+Top-level functions are shown as function nodes in `architecture.html`. This
+also works for Compose functions and KMP `expect`/`actual` functions when they
+are visible to the KSP task being executed.
+
+Import dependencies are also shown. If an annotated class or function imports a
+project class that is not annotated, the viewer can still create an imported
+class node and render the dependency.
 
 Build the project:
 

@@ -891,7 +891,10 @@ const kindAbbr = {
   "composable-function": "CF",
   "expect-function": "EF",
   "actual-function": "AF",
+  "expect-composable-function": "EC",
+  "actual-composable-function": "AC",
   "unknown": "?",
+  "imported-class": "IC",
   "external": "E"
 };
 const analyzerMeta = {
@@ -1532,8 +1535,8 @@ function renderArchitectureReport() {
       <div class="sectionTitle">Architecture Report</div>
       <div class="reportGrid">
         ${'$'}{reportCard(data.summary.classes, "Classes")}
+        ${'$'}{reportCard(data.nodes.filter(node => String(node.kind).includes("function")).length, "Functions")}
         ${'$'}{reportCard(data.summary.packages, "Packages")}
-        ${'$'}{reportCard(data.summary.modules, "Modules")}
         ${'$'}{reportCard(data.summary.dependencies, "Dependencies")}
       </div>
       ${'$'}{renderDependencyExplorer()}
