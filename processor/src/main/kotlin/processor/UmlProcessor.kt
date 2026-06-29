@@ -8,7 +8,6 @@ import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.validate
 import config.ArchitectureAnalysisConfig
@@ -23,6 +22,9 @@ import metrics.MetricsCalculator
 import uml.UmlDependencyCodeBuilder
 import uml.UmlMethodExtractor
 import uml.UmlPropertyExtractor
+import viewer.DeclarationDependencyCollector
+import viewer.ImportDependencyCollector
+import viewer.ProjectSymbolIndexBuilder
 import viewer.ViewerDataBuilder
 import viewer.ViewerJsonEncoder
 import writer.GeneratedFileWriter
@@ -113,6 +115,15 @@ class UmlProcessor(
                     dependencyAnalyzer,
                     importDependencyAnalyzer
                 ),
+
+            projectSymbolIndexBuilder =
+                ProjectSymbolIndexBuilder(),
+
+            declarationDependencyCollector =
+                DeclarationDependencyCollector(),
+
+            importDependencyCollector =
+                ImportDependencyCollector(),
 
             viewerDataBuilder =
                 ViewerDataBuilder(),
@@ -277,14 +288,15 @@ class UmlProcessor(
             valid
                 .filterIsInstance<KSFunctionDeclaration>()
                 .filter {
-                    it.containingFile != null
+                    it.containingFile != null &&
+                        it.qualifiedName != null
                 }
                 .distinctBy {
+
                     buildString {
                         append(
                             it.qualifiedName
                                 ?.asString()
-                                ?: it.simpleName.asString()
                         )
 
                         append(":")
@@ -295,20 +307,6 @@ class UmlProcessor(
                         )
                     }
                 }
-
-        val projectDeclarations =
-            resolver
-                .getAllFiles()
-                .flatMap {
-                    it.declarations
-                }
-                .flatMap {
-                    it.collectClassDeclarations()
-                }
-                .distinctBy {
-                    it.qualifiedName?.asString()
-                }
-                .toList()
 
         //
         // GENERATION
@@ -356,12 +354,9 @@ class UmlProcessor(
 
         htmlGenerationService
             .generateArchitectureHtml(
-                classes =
-                    allClasses,
-                functions =
-                    allFunctions,
-                projectClasses =
-                    projectDeclarations
+                allClasses,
+                allFunctions,
+                resolver
             )
 
         htmlGenerationService
@@ -395,19 +390,5 @@ class UmlProcessor(
             )
 
         return invalid
-    }
-
-    private fun KSDeclaration.collectClassDeclarations(): Sequence<KSClassDeclaration> {
-        return when (this) {
-            is KSClassDeclaration ->
-                sequenceOf(this) +
-                    declarations
-                        .flatMap {
-                            it.collectClassDeclarations()
-                        }
-
-            else ->
-                emptySequence()
-        }
     }
 }

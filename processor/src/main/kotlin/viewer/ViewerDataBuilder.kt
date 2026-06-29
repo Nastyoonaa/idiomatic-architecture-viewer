@@ -1,249 +1,109 @@
 package viewer
 
-import com.google.devtools.ksp.getDeclaredFunctions
-import com.google.devtools.ksp.symbol.ClassKind
-import com.google.devtools.ksp.symbol.KSClassDeclaration
-import com.google.devtools.ksp.symbol.KSFunctionDeclaration
-import com.google.devtools.ksp.symbol.Modifier
-import detector.LayerDetector
-import detector.ModuleDetector
-import detector.SourceSetDetector
-import java.io.File
-
 class ViewerDataBuilder {
 
     fun build(
-        classes: List<KSClassDeclaration>,
-        functions: List<KSFunctionDeclaration> = emptyList(),
-        projectClasses: List<KSClassDeclaration> = classes
+        declaredSymbols: List<ProjectSymbol>,
+        importedDependencies: List<ImportDependency>,
+        declarationEdges: List<ViewerEdge>
     ): ViewerData {
 
-        val distinctClasses =
-            classes
-                .filter {
-                    it.qualifiedName != null
-                }
-                .distinctBy {
-                    it.qualifiedName!!.asString()
-                }
-
-        val distinctFunctions =
-            functions
-                .filter {
-                    it.qualifiedName != null
-                }
-                .distinctBy {
-                    it.functionViewerId()
-                }
-
-        val projectClassById =
-            projectClasses
-                .filter {
-                    it.qualifiedName != null
-                }
-                .distinctBy {
-                    it.qualifiedName!!.asString()
-                }
-                .associateBy {
-                    it.viewerId()
-                }
-
-        val projectRoots =
-            (distinctClasses.map {
-                it.packageName.asString()
-            } + distinctFunctions.map {
-                it.packageName.asString()
-            })
-                .mapNotNull {
-                    it.projectRoot()
-                }
-                .toSet()
-
-        val nodeById =
-            linkedMapOf<String, ViewerNode>()
-
-        distinctClasses.forEach { clazz ->
-            nodeById[clazz.viewerId()] =
-                clazz.toViewerNode(
-                    methods =
-                        clazz.getDeclaredFunctions()
-                            .count {
-                                it.simpleName.asString() != "<init>"
-                            },
-                    properties =
-                        clazz.getAllProperties()
-                            .count()
-                )
-        }
-
-        distinctFunctions.forEach { function ->
-            nodeById[function.functionViewerId()] =
-                function.toViewerNode()
-        }
-
-        fun ensureClassNode(
-            dependency: KSClassDeclaration?
-        ): String? {
-            val id =
-                dependency
-                    ?.qualifiedName
-                    ?.asString()
-                    ?: return null
-
-            if (
-                id !in nodeById
-                &&
-                id in projectClassById
-            ) {
-                nodeById[id] =
-                    projectClassById
-                        .getValue(id)
-                        .toViewerNode(
-                            kindOverride = "imported-class",
-                            methods = 0,
-                            properties = 0
-                        )
+        val declaredById =
+            declaredSymbols.associateBy {
+                it.qualifiedName
             }
 
-            return id.takeIf {
-                it in nodeById
-            }
-        }
+        val importSymbols =
+            importedDependencies
+                .map {
+                    it.to
+                }
+                .filter {
+                    it.qualifiedName !in declaredById
+                }
+                .distinctBy {
+                    it.qualifiedName
+                }
 
-        fun ensureImportNode(
-            importedName: String
-        ): String? {
-            if (importedName in nodeById) {
-                return importedName
-            }
-
-            val knownClass =
-                projectClassById[importedName]
-
-            if (knownClass != null) {
-                nodeById[importedName] =
-                    knownClass.toViewerNode(
-                        kindOverride = "imported-class",
-                        methods = 0,
-                        properties = 0
+        val symbolOrigins =
+            buildMap {
+                declaredSymbols.forEach { symbol ->
+                    put(
+                        symbol.qualifiedName,
+                        ViewerNodeOrigin.DECLARATION
                     )
-
-                return importedName
-            }
-
-            if (
-                projectRoots.isNotEmpty()
-                &&
-                projectRoots.none {
-                    importedName == it || importedName.startsWith("$it.")
                 }
-            ) {
-                return null
+
+                importedDependencies.forEach { dependency ->
+                    putIfAbsent(
+                        dependency.to.qualifiedName,
+                        dependency.origin
+                    )
+                }
             }
 
-            val packageName =
-                importedName.substringBeforeLast(
-                    delimiter = ".",
-                    missingDelimiterValue = ""
+        val importEdges =
+            importedDependencies.map { dependency ->
+                ViewerEdge(
+                    from = dependency.from,
+                    to = dependency.to.qualifiedName,
+                    type = "import",
+                    snippet = dependency.snippet
                 )
-
-            val label =
-                importedName.substringAfterLast(".")
-
-            nodeById[importedName] =
-                ViewerNode(
-                    id = importedName,
-                    label = label,
-                    packageName = packageName,
-                    moduleName = "imported",
-                    sourceSetName = "unknown",
-                    fileName = "${label}.kt",
-                    kind = "imported-class",
-                    layer = packageName.viewerLayerByPackage(),
-                    methods = 0,
-                    properties = 0,
-                    fanIn = 0,
-                    fanOut = 0
-                )
-
-            return importedName
-        }
+            }
 
         val edges =
-            mutableListOf<ViewerEdge>()
-
-        fun addEdge(
-            fromId: String,
-            toId: String?,
-            type: String,
-            snippet: String
-        ) {
-            if (
-                toId == null
-                ||
-                toId == fromId
-                ||
-                toId !in nodeById
-            ) {
-                return
-            }
-
-            edges += ViewerEdge(
-                from = fromId,
-                to = toId,
-                type = type,
-                snippet = snippet
-            )
-        }
-
-        distinctClasses.forEach { clazz ->
-            clazz.extractEdges(
-                ensureClassNode = ::ensureClassNode,
-                ensureImportNode = ::ensureImportNode,
-                addEdge = ::addEdge
-            )
-        }
-
-        distinctFunctions.forEach { function ->
-            function.extractEdges(
-                ensureClassNode = ::ensureClassNode,
-                ensureImportNode = ::ensureImportNode,
-                addEdge = ::addEdge
-            )
-        }
-
-        val distinctEdges =
-            edges
+            (declarationEdges + importEdges)
                 .distinctBy {
                     "${it.from}|${it.to}|${it.type}"
                 }
 
         val nodes =
-            nodeById
-                .values
-                .map { node ->
-                    node.copy(
+            (declaredSymbols + importSymbols)
+                .distinctBy {
+                    it.qualifiedName
+                }
+                .map { symbol ->
+                    val id =
+                        symbol.qualifiedName
+
+                    ViewerNode(
+                        id = id,
+                        label = symbol.simpleName,
+                        packageName = symbol.packageName,
+                        moduleName = symbol.moduleName,
+                        sourceSetName = symbol.sourceSetName,
+                        fileName = symbol.fileName,
+                        kind = symbol.viewerKind(),
+                        origin =
+                            symbolOrigins[id]
+                                ?.name
+                                ?: ViewerNodeOrigin.IMPORT.name,
+                        resolved = symbol.isResolved,
+                        layer = symbol.layer,
+                        methods = symbol.methods,
+                        properties = symbol.properties,
+                        isComposable = symbol.isComposable,
+                        platformModifier = symbol.platformModifier.name,
                         fanIn =
-                            distinctEdges.count {
-                                it.to == node.id
+                            edges.count {
+                                it.to == id
                             },
                         fanOut =
-                            distinctEdges.count {
-                                it.from == node.id
+                            edges.count {
+                                it.from == id
                             }
                     )
                 }
 
         return ViewerData(
             nodes = nodes,
-            edges = distinctEdges,
+            edges = edges,
             tree = buildTree(nodes),
             summary =
                 ViewerSummary(
-                    classes =
-                        distinctClasses.size,
-                    dependencies =
-                        distinctEdges.size,
+                    classes = nodes.size,
+                    dependencies = edges.size,
                     modules =
                         nodes.map {
                             it.moduleName
@@ -256,269 +116,32 @@ class ViewerDataBuilder {
         )
     }
 
-    private fun KSClassDeclaration.extractEdges(
-        ensureClassNode: (KSClassDeclaration?) -> String?,
-        ensureImportNode: (String) -> String?,
-        addEdge: (String, String?, String, String) -> Unit
-    ) {
-
-        val fromId =
-            viewerId()
-
-        primaryConstructor
-            ?.parameters
-            .orEmpty()
-            .forEach { parameter ->
-                val resolvedType =
-                    parameter.type.resolve()
-
-                addEdge(
-                    fromId,
-                    ensureClassNode(
-                        resolvedType.declaration as? KSClassDeclaration
-                    ),
-                    "constructor",
-                    "${parameter.name?.asString().orEmpty()}: ${resolvedType.declaration.simpleName.asString()}"
-                )
-            }
-
-        val constructorParameterNames =
-            primaryConstructor
-                ?.parameters
-                .orEmpty()
-                .mapNotNull {
-                    it.name?.asString()
-                }
-                .toSet()
-
-        getAllProperties()
-            .filter {
-                it.simpleName.asString() !in constructorParameterNames
-            }
-            .forEach { property ->
-                val resolvedType =
-                    property.type.resolve()
-
-                addEdge(
-                    fromId,
-                    ensureClassNode(
-                        resolvedType.declaration as? KSClassDeclaration
-                    ),
-                    "property",
-                    "val ${property.simpleName.asString()}: ${resolvedType.declaration.simpleName.asString()}"
-                )
-            }
-
-        getDeclaredFunctions()
-            .filter {
-                it.simpleName.asString() != "<init>"
-            }
-            .forEach { function ->
-                function.addSignatureEdges(
-                    fromId = fromId,
-                    ensureClassNode = ensureClassNode,
-                    addEdge = addEdge
-                )
-            }
-
-        superTypes
-            .forEach { superType ->
-                addEdge(
-                    fromId,
-                    ensureClassNode(
-                        superType.resolve()
-                            .declaration as? KSClassDeclaration
-                    ),
-                    "inheritance",
-                    "super type"
-                )
-            }
-
-        extractImports()
-            .forEach { importedName ->
-                addEdge(
-                    fromId,
-                    ensureImportNode(importedName),
-                    "import",
-                    "import $importedName"
-                )
-            }
-    }
-
-    private fun KSFunctionDeclaration.extractEdges(
-        ensureClassNode: (KSClassDeclaration?) -> String?,
-        ensureImportNode: (String) -> String?,
-        addEdge: (String, String?, String, String) -> Unit
-    ) {
-
-        val fromId =
-            functionViewerId()
-
-        addSignatureEdges(
-            fromId = fromId,
-            ensureClassNode = ensureClassNode,
-            addEdge = addEdge
-        )
-
-        extractImports()
-            .forEach { importedName ->
-                addEdge(
-                    fromId,
-                    ensureImportNode(importedName),
-                    "import",
-                    "import $importedName"
-                )
-            }
-    }
-
-    private fun KSFunctionDeclaration.addSignatureEdges(
-        fromId: String,
-        ensureClassNode: (KSClassDeclaration?) -> String?,
-        addEdge: (String, String?, String, String) -> Unit
-    ) {
-        parameters
-            .forEach { parameter ->
-                val resolvedType =
-                    parameter.type.resolve()
-
-                addEdge(
-                    fromId,
-                    ensureClassNode(
-                        resolvedType.declaration as? KSClassDeclaration
-                    ),
-                    "method",
-                    "fun ${simpleName.asString()}(${parameter.name?.asString().orEmpty()}: ${resolvedType.declaration.simpleName.asString()})"
-                )
-            }
-
-        val resolvedReturnType =
-            returnType
-                ?.resolve()
-
-        addEdge(
-            fromId,
-            ensureClassNode(
-                resolvedReturnType
-                    ?.declaration as? KSClassDeclaration
-            ),
-            "return-type",
-            "fun ${simpleName.asString()}(): ${resolvedReturnType?.declaration?.simpleName?.asString().orEmpty()}"
-        )
-    }
-
-    private fun KSClassDeclaration.toViewerNode(
-        kindOverride: String? = null,
-        methods: Int,
-        properties: Int
-    ): ViewerNode {
-        return ViewerNode(
-            id = viewerId(),
-            label =
-                simpleName.asString(),
-            packageName =
-                packageName.asString(),
-            moduleName =
-                ModuleDetector.detect(
-                    filePath()
-                ),
-            sourceSetName =
-                SourceSetDetector.detect(
-                    filePath()
-                ),
-            fileName =
-                containingFile
-                    ?.fileName
-                    ?: "${simpleName.asString()}.kt",
-            kind =
-                kindOverride
-                    ?: viewerKind(),
-            layer =
-                viewerLayer(),
-            methods =
-                methods,
-            properties =
-                properties,
-            fanIn =
-                0,
-            fanOut =
-                0
-        )
-    }
-
-    private fun KSFunctionDeclaration.toViewerNode(): ViewerNode {
-        val kind =
-            functionViewerKind()
-
-        return ViewerNode(
-            id = functionViewerId(),
-            label =
-                simpleName.asString(),
-            packageName =
-                packageName.asString(),
-            moduleName =
-                ModuleDetector.detect(
-                    filePath()
-                ),
-            sourceSetName =
-                SourceSetDetector.detect(
-                    filePath()
-                ),
-            fileName =
-                containingFile
-                    ?.fileName
-                    ?: "${simpleName.asString()}.kt",
-            kind =
-                kind,
-            layer =
-                packageName.asString()
-                    .viewerLayerByPackage(),
-            methods =
-                1,
-            properties =
-                0,
-            fanIn =
-                0,
-            fanOut =
-                0
-        )
-    }
-
-    private fun KSClassDeclaration.extractImports(): List<String> {
-        return containingFile
-            ?.filePath
-            .orEmpty()
-            .extractImportsFromFile()
-    }
-
-    private fun KSFunctionDeclaration.extractImports(): List<String> {
-        return containingFile
-            ?.filePath
-            .orEmpty()
-            .extractImportsFromFile()
-    }
-
-    private fun String.extractImportsFromFile(): List<String> {
-        if (isBlank()) {
-            return emptyList()
+    private fun ProjectSymbol.viewerKind(): String {
+        if (kind != ProjectSymbolKind.FUNCTION) {
+            return kind.viewerKind
         }
 
-        val source =
-            runCatching {
-                File(this).readText()
-            }.getOrDefault("")
+        return when {
+            isComposable &&
+                platformModifier == ProjectSymbolPlatformModifier.EXPECT ->
+                "expect-composable-function"
 
-        return Regex(
-            """import\s+([\w.]+)(?:\s+as\s+\w+)?"""
-        )
-            .findAll(source)
-            .map {
-                it.groupValues[1]
-            }
-            .filterNot {
-                it.endsWith(".*")
-            }
-            .distinct()
-            .toList()
+            isComposable &&
+                platformModifier == ProjectSymbolPlatformModifier.ACTUAL ->
+                "actual-composable-function"
+
+            isComposable ->
+                "composable-function"
+
+            platformModifier == ProjectSymbolPlatformModifier.EXPECT ->
+                "expect-function"
+
+            platformModifier == ProjectSymbolPlatformModifier.ACTUAL ->
+                "actual-function"
+
+            else ->
+                kind.viewerKind
+        }
     }
 
     private fun buildTree(
@@ -575,142 +198,5 @@ class ViewerDataBuilder {
                             }
                 )
             }
-    }
-
-    private fun KSClassDeclaration.viewerId(): String {
-        return qualifiedName!!.asString()
-    }
-
-    private fun KSFunctionDeclaration.functionViewerId(): String {
-        return qualifiedName
-            ?.asString()
-            ?: "${packageName.asString()}.${simpleName.asString()}"
-    }
-
-    private fun KSClassDeclaration.viewerKind(): String {
-        return when (classKind) {
-            ClassKind.OBJECT ->
-                "object"
-
-            ClassKind.INTERFACE ->
-                "interface"
-
-            ClassKind.ENUM_CLASS ->
-                "class"
-
-            ClassKind.ENUM_ENTRY ->
-                "object"
-
-            ClassKind.ANNOTATION_CLASS ->
-                "class"
-
-            else ->
-                if (
-                    modifiers.any {
-                        it.name == "DATA"
-                    }
-                ) {
-                    "data-class"
-                } else {
-                    "class"
-                }
-        }
-    }
-
-    private fun KSFunctionDeclaration.functionViewerKind(): String {
-        val isComposable =
-            annotations.any {
-                it.shortName.asString() == "Composable"
-            }
-
-        val platformModifier =
-            when {
-                Modifier.EXPECT in modifiers ->
-                    "expect"
-
-                Modifier.ACTUAL in modifiers ->
-                    "actual"
-
-                else ->
-                    null
-            }
-
-        return listOfNotNull(
-            platformModifier,
-            if (isComposable) {
-                "composable"
-            } else {
-                null
-            },
-            "function"
-        ).joinToString("-")
-    }
-
-    private fun KSClassDeclaration.viewerLayer(): String {
-        return when (
-            LayerDetector.detect(
-                this
-            )
-        ) {
-            "controller" ->
-                "presentation"
-
-            "service" ->
-                "domain"
-
-            "repository" ->
-                "data"
-
-            else ->
-                packageName.asString()
-                    .viewerLayerByPackage()
-        }
-    }
-
-    private fun String.viewerLayerByPackage(): String {
-        return when {
-            ".presentation." in this || ".ui." in this ->
-                "presentation"
-
-            ".domain." in this ->
-                "domain"
-
-            ".data." in this ->
-                "data"
-
-            else ->
-                "core"
-        }
-    }
-
-    private fun String.projectRoot(): String? {
-        val parts =
-            split(".")
-                .filter {
-                    it.isNotBlank()
-                }
-
-        return when {
-            parts.size >= 2 ->
-                "${parts[0]}.${parts[1]}"
-
-            parts.size == 1 ->
-                parts[0]
-
-            else ->
-                null
-        }
-    }
-
-    private fun KSClassDeclaration.filePath(): String {
-        return containingFile
-            ?.filePath
-            .orEmpty()
-    }
-
-    private fun KSFunctionDeclaration.filePath(): String {
-        return containingFile
-            ?.filePath
-            .orEmpty()
     }
 }

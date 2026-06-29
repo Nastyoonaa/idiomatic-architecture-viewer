@@ -1,10 +1,14 @@
 package generation
 
+import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import export.ArchitectureHtmlExporter
 import export.ClassHtmlExporter
 import export.PackageHtmlExporter
+import viewer.DeclarationDependencyCollector
+import viewer.ImportDependencyCollector
+import viewer.ProjectSymbolIndexBuilder
 import viewer.ViewerDataBuilder
 import viewer.ViewerJsonEncoder
 import writer.GeneratedFileWriter
@@ -13,6 +17,9 @@ class HtmlGenerationService(
     private val architectureHtmlExporter: ArchitectureHtmlExporter,
     private val packageHtmlExporter: PackageHtmlExporter,
     private val classHtmlExporter: ClassHtmlExporter,
+    private val projectSymbolIndexBuilder: ProjectSymbolIndexBuilder,
+    private val declarationDependencyCollector: DeclarationDependencyCollector,
+    private val importDependencyCollector: ImportDependencyCollector,
     private val viewerDataBuilder: ViewerDataBuilder,
     private val viewerJsonEncoder: ViewerJsonEncoder,
     private val fileWriter: GeneratedFileWriter,
@@ -22,13 +29,11 @@ class HtmlGenerationService(
     fun generateArchitectureHtml(
         classes: List<KSClassDeclaration>,
         functions: List<KSFunctionDeclaration> = emptyList(),
-        projectClasses: List<KSClassDeclaration> = classes
+        resolver: Resolver
     ) {
 
         if (
-            classes.isEmpty()
-            &&
-            functions.isEmpty()
+            (classes.isEmpty() && functions.isEmpty())
             ||
             !shouldGenerate(
                 "ArchitectureHtml"
@@ -37,15 +42,49 @@ class HtmlGenerationService(
             return
         }
 
+        val symbolIndex =
+            projectSymbolIndexBuilder.build(
+                resolver = resolver,
+                annotatedClasses = classes,
+                annotatedFunctions = functions
+            )
+
+        val declaredSymbols =
+            (classes + functions)
+                .mapNotNull {
+                    it.qualifiedName?.asString()
+                }
+                .distinct()
+                .mapNotNull {
+                    symbolIndex.findByQualifiedName(
+                        it
+                    )
+                }
+
+        val declarationEdges =
+            declarationDependencyCollector.collect(
+                classes = classes,
+                functions = functions,
+                symbolIndex = symbolIndex
+            )
+
+        val importedDependencies =
+            importDependencyCollector
+                .collect(
+                    annotatedSymbols = declaredSymbols,
+                    symbolIndex = symbolIndex
+                )
+                .dependencies
+
         val html =
             architectureHtmlExporter
                 .export(
                     viewerDataJson =
                         viewerJsonEncoder.encode(
                             viewerDataBuilder.build(
-                                classes = classes,
-                                functions = functions,
-                                projectClasses = projectClasses
+                                declaredSymbols = declaredSymbols,
+                                importedDependencies = importedDependencies,
+                                declarationEdges = declarationEdges
                             )
                         )
                 )

@@ -238,7 +238,37 @@ button {
 }
 .node {
   cursor: pointer;
-  transition: opacity 160ms ease;
+  filter: drop-shadow(0 0 0 rgba(124, 77, 255, 0));
+  transition:
+    opacity 150ms ease,
+    filter 150ms ease;
+}
+.node:hover {
+  filter: drop-shadow(0 0 10px rgba(124, 77, 255, 0.18));
+}
+.node.selected {
+  filter: drop-shadow(0 0 14px rgba(124, 77, 255, 0.24));
+}
+.node.dragging {
+  cursor: grabbing;
+  filter: drop-shadow(0 0 18px rgba(124, 77, 255, 0.34));
+  transition: opacity 120ms ease;
+}
+.nodeCore,
+.nodeRing {
+  transition:
+    opacity 140ms ease,
+    r 140ms ease,
+    stroke-width 140ms ease;
+}
+.node:hover .nodeCore {
+  r: 28.5px;
+}
+.node.selected .nodeCore {
+  r: 29px;
+}
+.node.dragging .nodeCore {
+  r: 28px;
 }
 .canvasShell.handMode .node,
 .canvasShell.handMode .edgeHitArea {
@@ -267,11 +297,27 @@ button {
   marker-end: url(#arrow);
   stroke: rgba(255, 255, 255, 0.13);
   stroke-width: 1.2;
+  transition:
+    opacity 140ms ease,
+    stroke 140ms ease,
+    stroke-width 140ms ease;
+}
+.edge.edge-import {
+  marker-end: url(#arrowImport);
+  opacity: 0.22;
+  stroke-width: 0.65;
 }
 .edge.active {
   marker-end: url(#arrowActive);
   stroke: var(--primary);
   stroke-width: 1.8;
+}
+.edge.edge-import.active {
+  opacity: 0.58;
+  stroke-width: 1.05;
+}
+.edge.dimmed {
+  opacity: 0.07;
 }
 .edgeHitArea {
   cursor: pointer;
@@ -280,6 +326,26 @@ button {
   stroke: transparent;
   stroke-linecap: round;
   stroke-width: 18;
+}
+.edgeHitArea.edgeHitArea-import {
+  stroke-width: 12;
+}
+.importNotice {
+  background: rgba(14, 14, 18, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: rgba(226, 226, 232, 0.74);
+  font-size: 11px;
+  left: 14px;
+  line-height: 1.35;
+  max-width: 360px;
+  padding: 8px 10px;
+  position: absolute;
+  top: 46px;
+  z-index: 2;
+}
+.importNotice.hidden {
+  display: none;
 }
 .inspector {
   background: var(--card);
@@ -448,6 +514,33 @@ button {
   gap: 8px;
   margin: 6px 0;
   padding: 7px 9px;
+}
+.dependencyGroup {
+  margin: 10px 0;
+}
+.dependencyGroupHeader {
+  align-items: center;
+  color: rgba(226, 226, 232, 0.78);
+  display: flex;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 8px;
+  margin: 8px 0 6px;
+}
+.dependencyGroupHeader .count {
+  color: var(--muted-foreground);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  margin-left: auto;
+}
+.showImportsButton {
+  justify-content: center;
+  margin-top: 10px;
+  width: 100%;
+}
+.showImportsButton.active {
+  background: rgba(96, 165, 250, 0.16);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #60a5fa;
 }
 .dependencySearch {
   background: rgba(30, 30, 40, 0.72);
@@ -704,7 +797,7 @@ $viewerDataJson
       <button class="chip" data-level="package">Package</button>
       <button class="chip" data-level="module">Module</button>
       <button class="chip active" data-type="constructor">Constructor</button>
-      <button class="chip active" data-type="import">Import</button>
+      <button class="chip" data-type="import">Import</button>
       <button class="chip active" data-type="property">Property</button>
       <button class="chip active" data-type="inheritance">Inheritance</button>
       <button class="chip active" data-type="method">Method</button>
@@ -734,6 +827,7 @@ $viewerDataJson
         <button id="resetLayout" class="iconBtn">Reset Layout</button>
       </div>
       <svg id="graph" class="graph"></svg>
+      <div id="importNotice" class="importNotice hidden"></div>
       <div id="edgePanel" class="edgePanel hidden"></div>
     </main>
     <aside id="inspector" class="inspector"></aside>
@@ -748,6 +842,7 @@ const data = JSON.parse(document.getElementById("architecture-data").textContent
 const state = {
   selectedId: null,
   selectedEdgeKey: null,
+  hoveredEdgeKey: null,
   hoveredId: null,
   focusMode: false,
   handMode: false,
@@ -759,12 +854,14 @@ const state = {
     pkg: "",
     layer: ""
   },
-  activeTypes: new Set(["constructor", "import", "property", "inheritance", "method", "return-type"]),
+  activeTypes: new Set(["constructor", "property", "inheritance", "method", "return-type"]),
   search: "",
   dependencySearch: "",
   zoom: 1,
   pan: { x: 0, y: 0 },
   nodePositions: {},
+  draggingNodeId: null,
+  graphFrame: null,
   expanded: new Set()
 };
 const layerColors = {
@@ -787,6 +884,8 @@ const kindAbbr = {
   "class": "C",
   "object": "O",
   "interface": "I",
+  "enum": "E",
+  "annotation": "@",
   "data-class": "D",
   "function": "F",
   "composable-function": "CF",
@@ -794,6 +893,7 @@ const kindAbbr = {
   "actual-function": "AF",
   "expect-composable-function": "EC",
   "actual-composable-function": "AC",
+  "unknown": "?",
   "imported-class": "IC",
   "external": "E"
 };
@@ -811,6 +911,7 @@ const treeEl = document.getElementById("tree");
 const inspectorEl = document.getElementById("inspector");
 const statusLeft = document.getElementById("statusLeft");
 const edgePanelEl = document.getElementById("edgePanel");
+const importNoticeEl = document.getElementById("importNotice");
 const canvasShell = document.querySelector(".canvasShell");
 const filterElements = {
   module: document.getElementById("moduleFilter"),
@@ -856,6 +957,8 @@ function getLevelData() {
         sourceSet: node.sourceSet,
         file: "-",
         kind: state.level,
+        origin: "DECLARATION",
+        resolved: true,
         layer: node.layer,
         methods: 0,
         properties: 0,
@@ -892,7 +995,7 @@ function getLevelData() {
 function filteredData() {
   const base = getLevelData();
   const query = state.search.trim().toLowerCase();
-  const edges = base.edges.filter(edge => state.activeTypes.has(edge.type));
+  const edges = base.edges.filter(edge => edge.type === "import" || state.activeTypes.has(edge.type));
   let nodes = base.nodes;
   if (query) {
     const matching = new Set(nodes
@@ -920,6 +1023,81 @@ function filteredData() {
   };
 }
 
+function visibleGraphData(nodes, edges, activeId) {
+  const highlightedEdgeKey =
+    state.hoveredEdgeKey
+    || state.selectedEdgeKey;
+  const highlightedEdge =
+    highlightedEdgeKey
+      ? findEdgeByKey(highlightedEdgeKey)
+      : null;
+  const highlightedEdgeKeyValue = highlightedEdge ? edgeKey(highlightedEdge) : null;
+  const importCandidates = edges.filter(edge => {
+    if (edge.type !== "import") return false;
+    if (state.activeTypes.has("import")) {
+      return activeId
+        ? edge.from === activeId || edge.to === activeId
+        : true;
+    }
+    return highlightedEdgeKeyValue && edgeKey(edge) === highlightedEdgeKeyValue;
+  });
+  const visibleImportKeys =
+    new Set(
+      importCandidates
+        .map(edgeKey)
+    );
+  const graphEdges =
+    edges.filter(edge => {
+      if (edge.type !== "import") return true;
+      return visibleImportKeys.has(edgeKey(edge));
+    });
+  const graphEdgeIds =
+    new Set();
+  graphEdges.forEach(edge => {
+    graphEdgeIds.add(edge.from);
+    graphEdgeIds.add(edge.to);
+  });
+  const graphNodes =
+    nodes.filter(node => {
+      return node.origin === "DECLARATION"
+        || graphEdgeIds.has(node.id)
+        || node.id === activeId;
+    });
+  return {
+    nodes: graphNodes,
+    edges: graphEdges,
+    visibleImportCount: visibleImportKeys.size,
+    totalImportCount:
+      activeId
+        ? edges.filter(edge => edge.type === "import" && (edge.from === activeId || edge.to === activeId)).length
+        : edges.filter(edge => edge.type === "import").length,
+    showAllImports: state.activeTypes.has("import"),
+    highlightedImport: highlightedEdge && highlightedEdge.type === "import"
+  };
+}
+
+function renderImportNotice(visibility) {
+  if (!visibility || !visibility.totalImportCount || !visibility.showAllImports && !visibility.highlightedImport) {
+    importNoticeEl.classList.add("hidden");
+    importNoticeEl.textContent = "";
+    return;
+  }
+  if (visibility.showAllImports) {
+    importNoticeEl.textContent =
+      `Showing all ${'$'}{visibility.visibleImportCount} import dependencies on the graph.`;
+    importNoticeEl.classList.remove("hidden");
+    return;
+  }
+  if (visibility.highlightedImport) {
+    importNoticeEl.textContent =
+      "Showing selected import dependency.";
+    importNoticeEl.classList.remove("hidden");
+    return;
+  }
+  importNoticeEl.classList.add("hidden");
+  importNoticeEl.textContent = "";
+}
+
 function layout(nodes) {
   const rect = graph.getBoundingClientRect();
   const width = Math.max(900, rect.width);
@@ -938,75 +1116,6 @@ function layout(nodes) {
     });
   });
   return positions;
-}
-
-function applyForceRelaxation(draggedId) {
-  if (state.level !== "class") {
-    return;
-  }
-  const { nodes, edges } = filteredData();
-  const positions = layout(nodes);
-  const nodeIds = new Set(nodes.map(node => node.id));
-  const dragged = positions[draggedId];
-  if (!dragged) {
-    return;
-  }
-  const connected = new Set();
-  edges.forEach(edge => {
-    if (edge.from === draggedId) connected.add(edge.to);
-    if (edge.to === draggedId) connected.add(edge.from);
-  });
-  nodes.forEach(node => {
-    if (node.id === draggedId || !nodeIds.has(node.id)) {
-      return;
-    }
-    const current = positions[node.id];
-    if (!current) {
-      return;
-    }
-    let nextX = current.x;
-    let nextY = current.y;
-    const dx = current.x - dragged.x;
-    const dy = current.y - dragged.y;
-    const distance = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-    if (connected.has(node.id)) {
-      const target = 180;
-      const pull = (distance - target) * 0.045;
-      nextX -= (dx / distance) * pull;
-      nextY -= (dy / distance) * pull;
-    } else if (distance < 150) {
-      const push = (150 - distance) * 0.055;
-      nextX += (dx / distance) * push;
-      nextY += (dy / distance) * push;
-    }
-    edges.forEach(edge => {
-      const isNeighbor =
-        edge.from === node.id
-        || edge.to === node.id;
-      if (!isNeighbor) {
-        return;
-      }
-      const otherId =
-        edge.from === node.id
-          ? edge.to
-          : edge.from;
-      if (otherId === draggedId || !positions[otherId]) {
-        return;
-      }
-      const other = positions[otherId];
-      const odx = current.x - other.x;
-      const ody = current.y - other.y;
-      const od = Math.max(1, Math.sqrt(odx * odx + ody * ody));
-      const target = 170;
-      const adjust = (od - target) * 0.012;
-      nextX -= (odx / od) * adjust;
-      nextY -= (ody / od) * adjust;
-    });
-    state.nodePositions[node.id] = {
-      x: current.x + (nextX - current.x) * 0.8,
-      y: current.y + (nextY - current.y) * 0.8
-    };
-  });
 }
 
 function connectedIds(id, edges) {
@@ -1036,6 +1145,10 @@ function nodeInfo(id) {
     pkg: "",
     module: "",
     sourceSet: "",
+    file: "",
+    kind: "unknown",
+    origin: "UNRESOLVED_IMPORT",
+    resolved: false,
     layer: "external"
   };
 }
@@ -1058,12 +1171,14 @@ function dependencyReason(edge) {
 function selectEdge(edge) {
   const key = edgeKey(edge);
   state.selectedEdgeKey = state.selectedEdgeKey === key ? null : key;
+  state.hoveredEdgeKey = null;
   state.selectedId = null;
   renderAll();
 }
 
 function openDependency(edge) {
   state.selectedEdgeKey = edgeKey(edge);
+  state.hoveredEdgeKey = null;
   renderGraph();
   renderInspector();
   renderEdgePanel();
@@ -1074,7 +1189,6 @@ function explorerBaseEdges(scopeId) {
   return data.edges.filter(edge => {
     return visibleNodeIds.has(edge.from)
       && visibleNodeIds.has(edge.to)
-      && state.activeTypes.has(edge.type)
       && (!scopeId || edge.from === scopeId || edge.to === scopeId);
   });
 }
@@ -1149,11 +1263,17 @@ function renderDependencyRows(edges) {
 }
 
 function renderGraph() {
-  const { nodes, edges } = filteredData();
-  const positions = layout(nodes);
+  const filtered = filteredData();
   const activeId = state.hoveredId || state.selectedId;
+  const graphData = visibleGraphData(filtered.nodes, filtered.edges, activeId);
+  const { nodes, edges } = graphData;
+  renderImportNotice(graphData);
+  const positions = layout(nodes);
   const connected = connectedIds(activeId, edges);
-  const selectedEdge = findEdgeByKey(state.selectedEdgeKey);
+  const highlightedEdgeKey =
+    state.hoveredEdgeKey
+    || state.selectedEdgeKey;
+  const selectedEdge = findEdgeByKey(highlightedEdgeKey);
   const selectedEdgeIds = selectedEdge ? new Set([selectedEdge.from, selectedEdge.to]) : null;
   graph.innerHTML = `
     <defs>
@@ -1165,6 +1285,9 @@ function renderGraph() {
       </marker>
       <marker id="arrowActive" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
         <path d="M0,0 L0,6 L6,3 z" fill="#7c4dff"></path>
+      </marker>
+      <marker id="arrowImport" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L6,3 z" fill="rgba(96,165,250,0.32)"></path>
       </marker>
     </defs>
     <rect width="100%" height="100%" fill="url(#grid)"></rect>
@@ -1180,13 +1303,19 @@ function renderGraph() {
     const pathData = `M${'$'}{from.x},${'$'}{from.y} Q${'$'}{mx},${'$'}{my} ${'$'}{to.x},${'$'}{to.y}`;
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", pathData);
-    const isSelectedEdge = state.selectedEdgeKey === edgeKey(edge);
-    path.setAttribute("class", isSelectedEdge || (activeId && connected.has(edge.from) && connected.has(edge.to)) ? "edge active" : "edge");
+    const isSelectedEdge = highlightedEdgeKey === edgeKey(edge);
+    const isConnectedEdge = activeId && connected.has(edge.from) && connected.has(edge.to);
+    const isActiveEdge = edge.type === "import" ? isSelectedEdge : isSelectedEdge || isConnectedEdge;
+    const pathClasses = ["edge", `edge-${'$'}{edge.type}`];
+    if (isActiveEdge) pathClasses.push("active");
+    if (activeId && !isConnectedEdge && !isSelectedEdge) pathClasses.push("dimmed");
+    if (!activeId && selectedEdgeIds && !isSelectedEdge) pathClasses.push("dimmed");
+    path.setAttribute("class", pathClasses.join(" "));
     if (typeDash[edge.type]) path.setAttribute("stroke-dasharray", typeDash[edge.type]);
     viewport.appendChild(path);
     const hitArea = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hitArea.setAttribute("d", pathData);
-    hitArea.setAttribute("class", "edgeHitArea");
+    hitArea.setAttribute("class", edge.type === "import" ? "edgeHitArea edgeHitArea-import" : "edgeHitArea");
     hitArea.addEventListener("click", event => {
       event.stopPropagation();
       if (state.handMode) {
@@ -1203,11 +1332,16 @@ function renderGraph() {
     const faded =
       (activeId && !connected.has(node.id))
       || (!activeId && selectedEdgeIds && !selectedEdgeIds.has(node.id));
+    const neighbor =
+      activeId
+      && connected.has(node.id)
+      && node.id !== activeId;
     const selected = node.id === state.selectedId;
+    const dragging = node.id === state.draggingNodeId;
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    group.setAttribute("class", "node");
+    group.setAttribute("class", ["node", selected ? "selected" : "", dragging ? "dragging" : ""].filter(Boolean).join(" "));
     group.setAttribute("transform", `translate(${'$'}{pos.x},${'$'}{pos.y})`);
-    group.style.opacity = faded ? "0.25" : "1";
+    group.style.opacity = faded ? "0.3" : neighbor ? "0.9" : "1";
     let dragStart = null;
     group.addEventListener("mousedown", event => {
       if (state.handMode) {
@@ -1220,6 +1354,8 @@ function renderGraph() {
         pos: { ...pos },
         moved: false
       };
+      state.draggingNodeId = node.id;
+      renderGraph();
       const move = moveEvent => {
         const dx = (moveEvent.clientX - dragStart.x) / state.zoom;
         const dy = (moveEvent.clientY - dragStart.y) / state.zoom;
@@ -1230,16 +1366,18 @@ function renderGraph() {
           x: dragStart.pos.x + dx,
           y: dragStart.pos.y + dy
         };
-        applyForceRelaxation(node.id);
-        renderGraph();
+        scheduleGraphRender();
       };
       const up = upEvent => {
         window.removeEventListener("mousemove", move);
         window.removeEventListener("mouseup", up);
+        state.draggingNodeId = null;
         if (!dragStart.moved) {
           state.selectedEdgeKey = null;
           state.selectedId = state.selectedId === node.id ? null : node.id;
           renderAll();
+        } else {
+          renderGraph();
         }
         dragStart = null;
       };
@@ -1249,14 +1387,25 @@ function renderGraph() {
     group.addEventListener("mouseenter", () => { state.hoveredId = node.id; renderGraph(); });
     group.addEventListener("mouseleave", () => { state.hoveredId = null; renderGraph(); });
     group.innerHTML = `
-      ${'$'}{selected ? `<circle r="34" fill="none" stroke="${'$'}{color}" stroke-width="1.4" stroke-dasharray="4 3"></circle>` : ""}
-      <circle r="27" fill="${'$'}{color}22" stroke="${'$'}{color}" stroke-width="${'$'}{selected ? 2 : 1.2}"></circle>
+      ${'$'}{selected ? `<circle class="nodeRing" r="34" fill="none" stroke="${'$'}{color}" stroke-width="1.4" stroke-dasharray="4 3"></circle>` : ""}
+      <circle class="nodeCore" r="27" fill="${'$'}{color}22" stroke="${'$'}{color}" stroke-width="${'$'}{selected ? 2 : 1.2}"></circle>
       <text y="4" text-anchor="middle" fill="${'$'}{color}" font-size="10" font-weight="700">${'$'}{kindAbbr[node.kind] || "N"}</text>
       <text class="nodeLabel" y="42">${'$'}{escapeHtml(node.label)}</text>
       <text class="nodePkg" y="56">${'$'}{escapeHtml(String(node.pkg).split(".").at(-1))}</text>
     `;
     viewport.appendChild(group);
   });
+}
+
+function scheduleGraphRender() {
+  if (state.graphFrame) {
+    return;
+  }
+  state.graphFrame =
+    requestAnimationFrame(() => {
+      state.graphFrame = null;
+      renderGraph();
+    });
 }
 
 function renderTreeNodes(nodes, depth = 0) {
@@ -1332,24 +1481,27 @@ function renderInspector() {
       <div class="nodeBadge" style="background:${'$'}{layerColors[node.layer]}22;color:${'$'}{layerColors[node.layer]}">${'$'}{kindAbbr[node.kind] || "C"}</div>
       <div>
         <div style="font-weight:700">${'$'}{escapeHtml(node.label)}</div>
-        <div style="color:var(--muted-foreground);font-size:11px">${'$'}{escapeHtml(node.kind)}</div>
+        <div style="color:var(--muted-foreground);font-size:11px">${'$'}{escapeHtml(symbolSubtitle(node))}</div>
       </div>
     </div>
     <div class="inspectorBody">
       <section class="section">
-        <div class="sectionTitle">Node Information</div>
+        <div class="sectionTitle">Symbol Information</div>
         ${'$'}{infoRow("Package", node.pkg)}
         ${'$'}{infoRow("Module", node.module)}
         ${'$'}{infoRow("Source Set", node.sourceSet)}
         ${'$'}{infoRow("File", node.file)}
         ${'$'}{infoRow("Layer", node.layer)}
+        ${'$'}{infoRow("Origin", node.origin || "DECLARATION")}
+        ${'$'}{infoRow("Resolved", node.resolved === false ? "false" : "true")}
+        ${'$'}{node.kind.includes("function") ? infoRow("Composable", node.isComposable ? "true" : "false") : ""}
+        ${'$'}{node.platformModifier && node.platformModifier !== "NONE" ? infoRow("Platform", node.platformModifier) : ""}
       </section>
       <section class="section">
         <div class="sectionTitle">Dependencies</div>
-        <div style="color:var(--muted-foreground);font-size:10px;margin-bottom:6px">Outgoing (${'$'}{outgoing.length})</div>
-        ${'$'}{outgoing.map(edge => depChip(edge, edge.to)).join("") || `<div class="rowValue">None</div>`}
-        <div style="color:var(--muted-foreground);font-size:10px;margin:12px 0 6px">Incoming (${'$'}{incoming.length})</div>
-        ${'$'}{incoming.map(edge => depChip(edge, edge.from)).join("") || `<div class="rowValue">None</div>`}
+        ${'$'}{renderGroupedDependencySection("Outgoing", outgoing, edge => edge.to)}
+        ${'$'}{renderGroupedDependencySection("Incoming", incoming, edge => edge.from)}
+        ${'$'}{nodeHasImportDependencies(node.id) ? `<button class="chip showImportsButton ${'$'}{state.activeTypes.has("import") ? "active" : ""}" data-show-imports>${'$'}{state.activeTypes.has("import") ? "Hide import edges" : "Show all import edges"}</button>` : ""}
       </section>
       ${'$'}{renderDependencyExplorer(node.id)}
       <section class="section">
@@ -1488,6 +1640,59 @@ function infoRow(label, value) {
   return `<div class="row"><span class="rowLabel">${'$'}{label}</span><span class="rowValue">${'$'}{escapeHtml(value)}</span></div>`;
 }
 
+function symbolSubtitle(node) {
+  const parts = [node.kind, node.origin || "DECLARATION"];
+  if (node.isComposable) {
+    parts.push("Composable");
+  }
+  if (node.platformModifier && node.platformModifier !== "NONE") {
+    parts.push(node.platformModifier);
+  }
+  return parts.join(" · ");
+}
+
+function nodeHasImportDependencies(nodeId) {
+  return data.edges.some(edge => edge.type === "import" && (edge.from === nodeId || edge.to === nodeId));
+}
+
+function renderGroupedDependencySection(label, edges, targetSelector) {
+  if (!edges.length) {
+    return `
+      <div style="color:var(--muted-foreground);font-size:10px;margin:12px 0 6px">${'$'}{label} (0)</div>
+      <div class="rowValue">None</div>
+    `;
+  }
+  const groups =
+    dependencyTypeOrder()
+      .map(type => ({
+        type,
+        edges: edges.filter(edge => edge.type === type)
+      }))
+      .filter(group => group.edges.length);
+  return `
+    <div style="color:var(--muted-foreground);font-size:10px;margin:12px 0 6px">${'$'}{label} (${'$'}{edges.length})</div>
+    ${'$'}{groups.map(group => renderDependencyGroup(group.type, group.edges, targetSelector)).join("")}
+  `;
+}
+
+function renderDependencyGroup(type, edges, targetSelector) {
+  const meta = analyzerMeta[type] || analyzerMeta.import;
+  const open = type !== "import" || edges.length <= 12;
+  return `
+    <details class="dependencyGroup" ${'$'}{open ? "open" : ""}>
+      <summary class="dependencyGroupHeader">
+        <span>${'$'}{escapeHtml(meta.label)}</span>
+        <span class="count">${'$'}{edges.length}</span>
+      </summary>
+      ${'$'}{edges.map(edge => depChip(edge, targetSelector(edge))).join("")}
+    </details>
+  `;
+}
+
+function dependencyTypeOrder() {
+  return ["constructor", "inheritance", "property", "method", "return-type", "import", "annotation"];
+}
+
 function depChip(edge, id) {
   const node = data.nodes.find(item => item.id === id);
   if (!node) return "";
@@ -1501,12 +1706,40 @@ function findEdgeByKey(key) {
 
 function bindDependencyRows() {
   inspectorEl.querySelectorAll("[data-edge-key]").forEach(item => {
+    item.onmouseenter = () => {
+      const key = item.getAttribute("data-edge-key");
+      const edge = findEdgeByKey(key);
+      if (edge && edge.type === "import" && !state.activeTypes.has("import")) {
+        state.hoveredEdgeKey = key;
+        renderGraph();
+      }
+    };
+    item.onmouseleave = () => {
+      if (state.hoveredEdgeKey === item.getAttribute("data-edge-key")) {
+        state.hoveredEdgeKey = null;
+        renderGraph();
+      }
+    };
     item.onclick = event => {
       event.stopPropagation();
       const edge = findEdgeByKey(item.getAttribute("data-edge-key"));
       if (edge) {
         openDependency(edge);
       }
+    };
+  });
+  inspectorEl.querySelectorAll("[data-show-imports]").forEach(button => {
+    button.onclick = event => {
+      event.stopPropagation();
+      if (state.activeTypes.has("import")) {
+        state.activeTypes.delete("import");
+      } else {
+        state.activeTypes.add("import");
+      }
+      document.querySelectorAll("[data-type='import']").forEach(item => {
+        item.classList.toggle("active", state.activeTypes.has("import"));
+      });
+      renderAll();
     };
   });
   inspectorEl.querySelectorAll("[data-dependency-search]").forEach(input => {
