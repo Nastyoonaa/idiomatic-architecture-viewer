@@ -788,6 +788,13 @@ const kindAbbr = {
   "object": "O",
   "interface": "I",
   "data-class": "D",
+  "function": "F",
+  "composable-function": "CF",
+  "expect-function": "EF",
+  "actual-function": "AF",
+  "expect-composable-function": "EC",
+  "actual-composable-function": "AC",
+  "imported-class": "IC",
   "external": "E"
 };
 const analyzerMeta = {
@@ -1330,7 +1337,7 @@ function renderInspector() {
     </div>
     <div class="inspectorBody">
       <section class="section">
-        <div class="sectionTitle">Class Information</div>
+        <div class="sectionTitle">Node Information</div>
         ${'$'}{infoRow("Package", node.pkg)}
         ${'$'}{infoRow("Module", node.module)}
         ${'$'}{infoRow("Source Set", node.sourceSet)}
@@ -1376,8 +1383,8 @@ function renderArchitectureReport() {
       <div class="sectionTitle">Architecture Report</div>
       <div class="reportGrid">
         ${'$'}{reportCard(data.summary.classes, "Classes")}
+        ${'$'}{reportCard(data.nodes.filter(node => String(node.kind).includes("function")).length, "Functions")}
         ${'$'}{reportCard(data.summary.packages, "Packages")}
-        ${'$'}{reportCard(data.summary.modules, "Modules")}
         ${'$'}{reportCard(data.summary.dependencies, "Dependencies")}
       </div>
       ${'$'}{renderDependencyExplorer()}
