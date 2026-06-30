@@ -64,7 +64,7 @@ class ImportDependencyCollector {
                 it.from != it.to.qualifiedName
             }
             .distinctBy {
-                "${it.from}|${it.to.qualifiedName}|${it.origin}"
+                "${it.from}|${it.to.qualifiedName}|${it.origin}|${it.snippet}"
             }
             .toList()
     }
@@ -144,7 +144,7 @@ class ImportDependencyCollector {
             )
 
         return ProjectSymbol(
-            qualifiedName = this,
+            qualifiedName = "unresolved:$this",
             simpleName = simpleName,
             packageName = packageName,
             moduleName = sourceSymbol.moduleName,

@@ -100,6 +100,7 @@ The processor automatically generates:
 
 ```text
 architecture.html
+architecture-snapshot.json
 com_example_service.html
 UserService.html
 ```
@@ -370,12 +371,62 @@ Open `architecture.html` in a browser to inspect the generated static viewer.
 
 ---
 
+# Architecture Snapshots
+
+The processor also generates `architecture-snapshot.json`. Keep this file from
+a previous build if you want to compare it with a newer architecture report.
+
+Typical flow:
+
+1. Generate the viewer for the current version of your project.
+2. Save `architecture-snapshot.json` somewhere safe, for example in CI
+   artifacts or release artifacts.
+3. After architecture changes, generate a new `architecture.html`.
+4. Open the new `architecture.html`.
+5. Click `Snapshot`.
+6. Load the older `architecture-snapshot.json`.
+
+The viewer will compare the old snapshot with the current full graph and show:
+
+- added and removed nodes
+- added and removed dependencies
+- nodes and dependency count changes
+- cycle count changes
+- architecture violation count changes
+
+Snapshot comparison uses the serialized architecture model, not the current UI
+state. Filters, selected nodes, zoom, and layout changes do not affect the
+snapshot diff.
+
+The snapshot file has this shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "generatedBy": "idiomatic-architecture-viewer",
+  "data": {
+    "nodes": [],
+    "edges": [],
+    "tree": [],
+    "summary": {},
+    "report": {}
+  }
+}
+```
+
+If the snapshot schema is unsupported or the file is invalid, the viewer shows
+an error and keeps the current architecture graph unchanged.
+
+---
+
 # Generated Files
 
 Examples:
 
 ```text
 architecture.html
+architecture.json
+architecture-snapshot.json
 ArchitectureOverview.puml
 ArchitectureMetrics.md
 DependencyCycles.md
@@ -422,7 +473,6 @@ Planned features:
 - CI/CD integration
 - architectural rule validation
 - graph filtering
-- architecture snapshots
 - dark mode viewer
 - graph clustering
 - AI-powered architecture recommendations

@@ -24,7 +24,7 @@ class DeclarationDependencyCollector {
                 )
             })
             .distinctBy {
-                "${it.from}|${it.to}|${it.type}"
+                "${it.from}|${it.to}|${it.type}|${it.context}"
             }
     }
 
@@ -43,7 +43,8 @@ class DeclarationDependencyCollector {
         fun addEdge(
             dependency: KSClassDeclaration?,
             type: String,
-            snippet: String
+            snippet: String,
+            context: String = "default"
         ) {
             val toId =
                 dependency
@@ -62,7 +63,8 @@ class DeclarationDependencyCollector {
                 from = fromId,
                 to = toId,
                 type = type,
-                snippet = snippet
+                snippet = snippet,
+                context = context
             )
         }
 
@@ -76,7 +78,9 @@ class DeclarationDependencyCollector {
                             .declaration as? KSClassDeclaration,
                     type = "constructor",
                     snippet =
-                        "${parameter.name?.asString().orEmpty()}: ${parameter.type.resolve().declaration.simpleName.asString()}"
+                        "${parameter.name?.asString().orEmpty()}: ${parameter.type.resolve().declaration.simpleName.asString()}",
+                    context =
+                        "constructor:${simpleName.asString()}:${parameter.name?.asString().orEmpty()}"
                 )
             }
 
@@ -100,7 +104,9 @@ class DeclarationDependencyCollector {
                             .declaration as? KSClassDeclaration,
                     type = "property",
                     snippet =
-                        "val ${property.simpleName.asString()}: ${property.type.resolve().declaration.simpleName.asString()}"
+                        "val ${property.simpleName.asString()}: ${property.type.resolve().declaration.simpleName.asString()}",
+                    context =
+                        "property:${property.simpleName.asString()}"
                 )
             }
 
@@ -117,7 +123,9 @@ class DeclarationDependencyCollector {
                                     .declaration as? KSClassDeclaration,
                             type = "method",
                             snippet =
-                                "fun ${function.simpleName.asString()}(${parameter.name?.asString().orEmpty()}: ${parameter.type.resolve().declaration.simpleName.asString()})"
+                                "fun ${function.simpleName.asString()}(${parameter.name?.asString().orEmpty()}: ${parameter.type.resolve().declaration.simpleName.asString()})",
+                            context =
+                                "method:${function.simpleName.asString()}(${parameter.name?.asString().orEmpty()})"
                         )
                     }
 
@@ -128,7 +136,9 @@ class DeclarationDependencyCollector {
                             ?.declaration as? KSClassDeclaration,
                     type = "return-type",
                     snippet =
-                        "fun ${function.simpleName.asString()}(): ${function.returnType?.resolve()?.declaration?.simpleName?.asString().orEmpty()}"
+                        "fun ${function.simpleName.asString()}(): ${function.returnType?.resolve()?.declaration?.simpleName?.asString().orEmpty()}",
+                    context =
+                        "return:${function.simpleName.asString()}"
                 )
             }
 
@@ -139,7 +149,9 @@ class DeclarationDependencyCollector {
                         superType.resolve()
                             .declaration as? KSClassDeclaration,
                     type = "inheritance",
-                    snippet = "super type"
+                    snippet = "super type",
+                    context =
+                        "inheritance:${superType.resolve().declaration.qualifiedName?.asString().orEmpty()}"
                 )
             }
 
@@ -161,7 +173,8 @@ class DeclarationDependencyCollector {
         fun addEdge(
             dependency: KSClassDeclaration?,
             type: String,
-            snippet: String
+            snippet: String,
+            context: String = "default"
         ) {
             val toId =
                 dependency
@@ -180,7 +193,8 @@ class DeclarationDependencyCollector {
                 from = fromId,
                 to = toId,
                 type = type,
-                snippet = snippet
+                snippet = snippet,
+                context = context
             )
         }
 
@@ -194,7 +208,9 @@ class DeclarationDependencyCollector {
                         resolved.declaration as? KSClassDeclaration,
                     type = "method",
                     snippet =
-                        "fun ${simpleName.asString()}(${parameter.name?.asString().orEmpty()}: ${resolved.declaration.simpleName.asString()})"
+                        "fun ${simpleName.asString()}(${parameter.name?.asString().orEmpty()}: ${resolved.declaration.simpleName.asString()})",
+                    context =
+                        "method:${simpleName.asString()}(${parameter.name?.asString().orEmpty()})"
                 )
             }
 
@@ -208,7 +224,9 @@ class DeclarationDependencyCollector {
                     ?.declaration as? KSClassDeclaration,
             type = "return-type",
             snippet =
-                "fun ${simpleName.asString()}(): ${resolvedReturnType?.declaration?.simpleName?.asString().orEmpty()}"
+                "fun ${simpleName.asString()}(): ${resolvedReturnType?.declaration?.simpleName?.asString().orEmpty()}",
+            context =
+                "return:${simpleName.asString()}"
         )
 
         return edges
