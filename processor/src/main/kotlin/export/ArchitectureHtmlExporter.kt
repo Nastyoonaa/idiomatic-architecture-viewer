@@ -160,7 +160,11 @@ button {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  width: 280px;
+  max-width: 560px;
+  min-width: 260px;
+  overflow: auto;
+  resize: horizontal;
+  width: 340px;
 }
 .panelTitle {
   align-items: center;
@@ -186,7 +190,7 @@ button {
   display: flex;
   gap: 6px;
   height: 24px;
-  overflow: hidden;
+  min-width: max-content;
   padding-right: 8px;
   user-select: none;
 }
@@ -205,8 +209,6 @@ button {
 .treeLabel {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .canvasShell {
@@ -228,8 +230,12 @@ button {
 .canvasTopRight { right: 14px; }
 .legend {
   align-items: center;
+  background: rgba(15, 15, 23, 0.72);
+  border: 1px solid rgba(42, 42, 56, 0.7);
+  border-radius: 8px;
   display: flex;
   gap: 12px;
+  padding: 8px 10px;
 }
 .legendItem {
   align-items: center;
@@ -237,6 +243,7 @@ button {
   display: flex;
   font-size: 10px;
   gap: 6px;
+  white-space: nowrap;
 }
 .dot {
   border-radius: 999px;
@@ -296,9 +303,12 @@ button {
   fill: #dcfce7;
 }
 .nodeHitTarget {
-  cursor: pointer;
+  cursor: grab;
   fill: transparent;
   pointer-events: all;
+}
+.node.dragging .nodeHitTarget {
+  cursor: grabbing;
 }
 .canvasShell.handMode .node,
 .canvasShell.handMode .edgeHitArea {
@@ -1045,22 +1055,24 @@ $viewerDataJson
   </header>
   <div class="main">
     <aside class="sidebar">
-      <div class="panelTitle">Project</div>
+      <div class="panelTitle" title="Drag the right edge to resize the project tree. Hover items to see full names.">Project</div>
       <div id="tree" class="tree"></div>
     </aside>
     <main class="canvasShell">
       <div class="canvasTopLeft">
         <div class="legend">
-          <span class="legendItem"><i class="dot" style="background:var(--presentation)"></i>Presentation</span>
-          <span class="legendItem"><i class="dot" style="background:var(--domain)"></i>Domain</span>
-          <span class="legendItem"><i class="dot" style="background:var(--data)"></i>Data</span>
-          <span class="legendItem"><i class="dot" style="background:var(--core)"></i>Core</span>
+          <span class="legendItem" title="Presentation: UI screens, view models, navigation, and user-facing state."><i class="dot" style="background:var(--presentation)"></i>Presentation</span>
+          <span class="legendItem" title="Domain: business rules, use cases, entities, and repository contracts."><i class="dot" style="background:var(--domain)"></i>Domain</span>
+          <span class="legendItem" title="Data: repository implementations, remote/local data sources, DTOs, and mappers."><i class="dot" style="background:var(--data)"></i>Data</span>
+          <span class="legendItem" title="Core: shared infrastructure, platform abstractions, utilities, and base services."><i class="dot" style="background:var(--core)"></i>Core</span>
         </div>
       </div>
       <div class="canvasTopRight">
         <button id="zoomIn" class="iconBtn">+</button>
         <button id="zoomOut" class="iconBtn">-</button>
         <button id="fitGraph" class="iconBtn">Fit</button>
+        <button id="fitSelection" class="iconBtn" title="Zoom to the selected node and its visible dependencies.">Fit Selection</button>
+        <button id="bringNeighbors" class="iconBtn" title="Move visible dependencies of the selected node closer without recalculating the whole layout.">Neighbors</button>
         <button id="handTool" class="iconBtn">Hand</button>
         <button id="resetLayout" class="iconBtn">Reset Layout</button>
       </div>
@@ -1443,6 +1455,84 @@ function connectedIds(id, edges) {
   return result;
 }
 
+function currentGraphData() {
+  const filtered = filteredData();
+  const activeId = state.hoveredId || state.selectedId;
+  return visibleGraphData(filtered.nodes, filtered.edges, activeId);
+}
+
+function selectedNeighborhood() {
+  const selectedId = state.selectedId;
+  if (!selectedId) return { ids: new Set(), nodes: [], edges: [] };
+  const filtered = filteredData();
+  const visible = visibleGraphData(filtered.nodes, filtered.edges, selectedId);
+  const ids = connectedIds(selectedId, visible.edges);
+  return {
+    ids,
+    nodes: visible.nodes.filter(node => ids.has(node.id)),
+    edges: visible.edges.filter(edge => ids.has(edge.from) && ids.has(edge.to))
+  };
+}
+
+function fitToNodeIds(ids) {
+  if (!ids || ids.size === 0) return;
+  const graphData = currentGraphData();
+  const positions = layout(graphData.nodes);
+  const points = graphData.nodes
+    .filter(node => ids.has(node.id) && positions[node.id])
+    .map(node => positions[node.id]);
+  if (!points.length) return;
+  const rect = graph.getBoundingClientRect();
+  const minX = Math.min(...points.map(point => point.x));
+  const maxX = Math.max(...points.map(point => point.x));
+  const minY = Math.min(...points.map(point => point.y));
+  const maxY = Math.max(...points.map(point => point.y));
+  const width = Math.max(180, maxX - minX + 180);
+  const height = Math.max(180, maxY - minY + 180);
+  const scale = Math.max(
+    0.35,
+    Math.min(2.2, Math.min((rect.width - 80) / width, (rect.height - 80) / height))
+  );
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  state.zoom = Number.isFinite(scale) ? scale : 1;
+  state.pan = {
+    x: rect.width / 2 - centerX * state.zoom,
+    y: rect.height / 2 - centerY * state.zoom
+  };
+  renderGraph();
+}
+
+function fitSelection() {
+  const neighborhood = selectedNeighborhood();
+  fitToNodeIds(neighborhood.ids);
+}
+
+function bringNeighborsToSelected() {
+  const selectedId = state.selectedId;
+  if (!selectedId) return;
+  const filtered = filteredData();
+  const positions = layout(filtered.nodes);
+  const center = positions[selectedId];
+  if (!center) return;
+  const visible = visibleGraphData(filtered.nodes, filtered.edges, selectedId);
+  const visibleNodeIds = new Set(visible.nodes.map(node => node.id));
+  const neighbors = Array.from(connectedIds(selectedId, visible.edges))
+    .filter(id => id !== selectedId && visibleNodeIds.has(id))
+    .sort((left, right) => nodeLabel(left).localeCompare(nodeLabel(right)));
+  if (!neighbors.length) return;
+  const radius = Math.max(170, Math.min(380, 140 + neighbors.length * 12));
+  neighbors.forEach((id, index) => {
+    const angle = -Math.PI / 2 + (index / Math.max(1, neighbors.length)) * Math.PI * 2;
+    state.nodePositions[id] = {
+      x: center.x + Math.cos(angle) * radius,
+      y: center.y + Math.sin(angle) * radius
+    };
+  });
+  state.nodePositions[selectedId] = center;
+  fitToNodeIds(new Set([selectedId, ...neighbors]));
+}
+
 function edgeKey(edge) {
   return `${'$'}{edge.from}|${'$'}{edge.to}|${'$'}{edge.type}|${'$'}{edgeContext(edge)}`;
 }
@@ -1469,6 +1559,46 @@ function nodeInfo(id) {
     resolved: false,
     layer: "external"
   };
+}
+
+function layerDescription(layer) {
+  const descriptions = {
+    presentation: "UI, screens, view models, navigation",
+    domain: "business rules, use cases, repository contracts",
+    data: "repository implementations, remote/local data, DTOs",
+    core: "shared infrastructure, platform abstractions, utilities",
+    external: "external or unresolved symbol"
+  };
+  return descriptions[layer] || "project symbol";
+}
+
+function treeNodeTooltip(node) {
+  if (!node) return "";
+  if (node.kind === "module") return `Module: ${'$'}{node.label}`;
+  if (node.kind === "sourceSet") return `Source set: ${'$'}{node.label}`;
+  if (node.kind === "package") return `Package: ${'$'}{node.id.replace(/^package:/, "")}`;
+  const info = nodeInfo(node.id);
+  return [
+    info.label || node.label,
+    info.pkg ? `Package: ${'$'}{info.pkg}` : "",
+    info.module ? `Module: ${'$'}{info.module}` : "",
+    info.sourceSet ? `Source set: ${'$'}{info.sourceSet}` : "",
+    info.file ? `File: ${'$'}{info.file}` : "",
+    info.id ? `Id: ${'$'}{info.id}` : ""
+  ].filter(Boolean).join("\\n");
+}
+
+function graphNodeTooltip(node) {
+  return [
+    node.label,
+    symbolSubtitle(node),
+    node.pkg ? `Package: ${'$'}{node.pkg}` : "",
+    node.module ? `Module: ${'$'}{node.module}` : "",
+    node.sourceSet ? `Source set: ${'$'}{node.sourceSet}` : "",
+    node.file ? `File: ${'$'}{node.file}` : "",
+    `Layer: ${'$'}{node.layer} - ${'$'}{layerDescription(node.layer)}`,
+    node.origin ? `Origin: ${'$'}{node.origin}` : ""
+  ].filter(Boolean).join("\\n");
 }
 
 function normalizeSnapshot(rawSnapshot) {
@@ -1876,6 +2006,15 @@ function renderGraph() {
         x: event.clientX,
         y: event.clientY,
         pos: { ...pos },
+        neighbors: Array.from(connectedIds(node.id, edges))
+          .filter(id => id !== node.id && positions[id])
+          .map(id => ({
+            id,
+            pos: { ...positions[id] },
+            strength: edges.some(edge => edge.type === "import" && (edge.from === node.id && edge.to === id || edge.to === node.id && edge.from === id))
+              ? 0.24
+              : 0.42
+          })),
         moved: false
       };
       const move = moveEvent => {
@@ -1890,6 +2029,12 @@ function renderGraph() {
             x: dragStart.pos.x + dx,
             y: dragStart.pos.y + dy
           };
+          dragStart.neighbors.forEach(neighbor => {
+            state.nodePositions[neighbor.id] = {
+              x: neighbor.pos.x + dx * neighbor.strength,
+              y: neighbor.pos.y + dy * neighbor.strength
+            };
+          });
           scheduleGraphRender();
         }
       };
@@ -1927,7 +2072,8 @@ function renderGraph() {
       }
     });
     group.innerHTML = `
-      <circle class="nodeHitTarget" r="48"></circle>
+      <title>${'$'}{escapeHtml(graphNodeTooltip(node))}</title>
+      <circle class="nodeHitTarget" r="58"></circle>
       ${'$'}{selected ? `<circle class="nodeRing" r="34" fill="none" stroke="${'$'}{color}" stroke-width="1.4" stroke-dasharray="4 3"></circle>` : ""}
       <circle class="nodeCore" r="27" fill="${'$'}{color}22" stroke="${'$'}{color}" stroke-width="${'$'}{selected ? 2 : 1.2}"></circle>
       <text y="4" text-anchor="middle" fill="${'$'}{color}" font-size="10" font-weight="700">${'$'}{kindAbbr[node.kind] || "N"}</text>
@@ -1955,8 +2101,9 @@ function renderTreeNodes(nodes, depth = 0) {
     const expanded = state.expanded.has(node.id);
     const selected = state.selectedId === node.id;
     const icon = node.kind === "module" ? "M" : node.kind === "sourceSet" ? "S" : node.kind === "package" ? "P" : "C";
+    const tooltip = treeNodeTooltip(node);
     return `
-      <div class="treeItem ${'$'}{selected ? "selected" : ""}" data-tree-id="${'$'}{escapeHtml(node.id)}" style="padding-left:${'$'}{8 + depth * 14}px">
+      <div class="treeItem ${'$'}{selected ? "selected" : ""}" data-tree-id="${'$'}{escapeHtml(node.id)}" title="${'$'}{escapeHtml(tooltip)}" style="padding-left:${'$'}{8 + depth * 14}px">
         <span class="treeToggle">${'$'}{hasChildren ? (expanded ? "v" : ">") : ""}</span>
         <span>${'$'}{icon}</span>
         <span class="treeLabel">${'$'}{escapeHtml(node.label)}</span>
@@ -2037,7 +2184,7 @@ function renderInspector() {
         ${'$'}{infoRow("Module", node.module)}
         ${'$'}{infoRow("Source Set", node.sourceSet)}
         ${'$'}{infoRow("File", node.file)}
-        ${'$'}{infoRow("Layer", node.layer)}
+        ${'$'}{infoRow("Layer", `${'$'}{node.layer} · ${'$'}{layerDescription(node.layer)}`)}
         ${'$'}{infoRow("Origin", node.origin || "DECLARATION")}
         ${'$'}{infoRow("Resolved", node.resolved === false ? "false" : "true")}
         ${'$'}{node.kind.includes("function") ? infoRow("Composable", node.isComposable ? "true" : "false") : ""}
@@ -2739,6 +2886,8 @@ document.getElementById("handTool").addEventListener("click", event => {
 document.getElementById("zoomIn").addEventListener("click", () => { state.zoom = Math.min(2.8, state.zoom * 1.2); renderGraph(); });
 document.getElementById("zoomOut").addEventListener("click", () => { state.zoom = Math.max(0.35, state.zoom * 0.8); renderGraph(); });
 document.getElementById("fitGraph").addEventListener("click", () => { state.zoom = 1; state.pan = { x: 0, y: 0 }; renderGraph(); });
+document.getElementById("fitSelection").addEventListener("click", fitSelection);
+document.getElementById("bringNeighbors").addEventListener("click", bringNeighborsToSelected);
 document.getElementById("resetLayout").addEventListener("click", () => {
   state.nodePositions = {};
   state.pan = { x: 0, y: 0 };

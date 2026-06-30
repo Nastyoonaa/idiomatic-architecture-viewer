@@ -107,6 +107,16 @@ UserService.html
 
 with interactive navigation between pages.
 
+Large graphs include a few navigation helpers:
+
+- the project tree can be resized horizontally, and long items expose full names on hover;
+- layer badges explain `presentation`, `domain`, `data`, and `core` in the viewer;
+- graph nodes can be dragged manually without recalculating the whole layout;
+- while dragging a node, its directly connected visible nodes are gently pulled with it;
+- `Fit Selection` zooms to the selected symbol and its visible dependencies;
+- `Neighbors` moves visible dependencies of the selected symbol closer, which helps inspect long edges in large projects;
+- `Reset Layout` restores the generated auto-layout.
+
 ---
 
 # Generated Output
