@@ -4,7 +4,8 @@ data class ViewerData(
     val nodes: List<ViewerNode>,
     val edges: List<ViewerEdge>,
     val tree: List<ViewerTreeNode>,
-    val summary: ViewerSummary
+    val summary: ViewerSummary,
+    val report: ViewerReport
 )
 
 data class ViewerNode(
@@ -45,4 +46,31 @@ data class ViewerSummary(
     val dependencies: Int,
     val modules: Int,
     val packages: Int
+)
+
+data class ViewerReport(
+    val cycles: List<ViewerCycle>,
+    val violations: List<ArchitectureViolation>,
+    val hotspots: List<ArchitectureHotspot>
+)
+
+data class ViewerCycle(
+    val nodes: List<String>,
+    val edges: List<String>
+)
+
+data class ArchitectureViolation(
+    val ruleId: String,
+    val severity: String,
+    val message: String,
+    val from: String,
+    val to: String,
+    val edgeType: String
+)
+
+data class ArchitectureHotspot(
+    val nodeId: String,
+    val fanIn: Int,
+    val fanOut: Int,
+    val total: Int
 )

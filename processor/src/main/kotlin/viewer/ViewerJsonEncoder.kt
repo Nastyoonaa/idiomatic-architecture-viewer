@@ -22,6 +22,8 @@ class ViewerJsonEncoder {
             }
             append(",\"summary\":")
             appendSummary(data.summary)
+            append(",\"report\":")
+            appendReport(data.report)
             append("}")
         }
     }
@@ -108,6 +110,68 @@ class ViewerJsonEncoder {
         append("}")
     }
 
+    private fun StringBuilder.appendReport(
+        report: ViewerReport
+    ) {
+        append("{")
+        append("\"cycles\":")
+        appendArray(report.cycles) {
+            appendCycle(it)
+        }
+        append(",\"violations\":")
+        appendArray(report.violations) {
+            appendViolation(it)
+        }
+        append(",\"hotspots\":")
+        appendArray(report.hotspots) {
+            appendHotspot(it)
+        }
+        append("}")
+    }
+
+    private fun StringBuilder.appendCycle(
+        cycle: ViewerCycle
+    ) {
+        append("{")
+        append("\"nodes\":")
+        appendStringArray(cycle.nodes)
+        append(",\"edges\":")
+        appendStringArray(cycle.edges)
+        append("}")
+    }
+
+    private fun StringBuilder.appendViolation(
+        violation: ArchitectureViolation
+    ) {
+        append("{")
+        appendField("ruleId", violation.ruleId)
+        append(",")
+        appendField("severity", violation.severity)
+        append(",")
+        appendField("message", violation.message)
+        append(",")
+        appendField("from", violation.from)
+        append(",")
+        appendField("to", violation.to)
+        append(",")
+        appendField("edgeType", violation.edgeType)
+        append("}")
+    }
+
+    private fun StringBuilder.appendHotspot(
+        hotspot: ArchitectureHotspot
+    ) {
+        append("{")
+        appendField("nodeId", hotspot.nodeId)
+        append(",")
+        appendField("fanIn", hotspot.fanIn)
+        append(",")
+        appendField("fanOut", hotspot.fanOut)
+        append(",")
+        appendField("total", hotspot.total)
+        append("}")
+    }
+
     private fun <T> StringBuilder.appendArray(
         values: List<T>,
         appendValue: StringBuilder.(T) -> Unit
@@ -120,6 +184,16 @@ class ViewerJsonEncoder {
             appendValue(value)
         }
         append("]")
+    }
+
+    private fun StringBuilder.appendStringArray(
+        values: List<String>
+    ) {
+        appendArray(values) {
+            append("\"")
+            append(escape(it))
+            append("\"")
+        }
     }
 
     private fun StringBuilder.appendField(

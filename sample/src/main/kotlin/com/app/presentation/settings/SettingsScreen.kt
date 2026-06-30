@@ -1,5 +1,6 @@
 package com.app.presentation.settings
 
+import com.app.data.remote.UserDto
 import com.app.settings.ImportedClassDependency
 import com.app.settings.ImportedEnumDependency
 import com.app.settings.ImportedInterfaceDependency
@@ -12,7 +13,8 @@ import uml.UmlDiagram
 class SettingsScreen {
 
     fun render(
-        dependency: ImportedInterfaceDependency
+        dependency: ImportedInterfaceDependency,
+        dto: UserDto
     ): ImportedEnumDependency {
         ImportedObjectDependency.touch(
             ImportedClassDependency()
@@ -20,9 +22,9 @@ class SettingsScreen {
 
         SettingsDependency()
         dependency.toString()
+        dto.toString()
         Instant.now()
 
         return ImportedEnumDependency.ENABLED
     }
 }
-

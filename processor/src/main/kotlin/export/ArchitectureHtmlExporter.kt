@@ -53,19 +53,21 @@ button {
   min-width: 960px;
 }
 .topbar {
-  align-items: center;
+  align-items: flex-start;
   background: rgba(14, 14, 18, 0.96);
   border-bottom: 1px solid var(--border);
   display: flex;
-  gap: 12px;
-  height: 44px;
-  padding: 0 16px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 44px;
+  padding: 8px 16px;
 }
 .brand {
   align-items: center;
   display: flex;
   gap: 8px;
   font-weight: 700;
+  height: 30px;
   white-space: nowrap;
 }
 .brandIcon {
@@ -83,11 +85,12 @@ button {
   border: 1px solid var(--border);
   border-radius: 8px;
   display: flex;
+  flex: 0 1 260px;
   gap: 8px;
   height: 30px;
   max-width: 360px;
+  min-width: 180px;
   padding: 0 10px;
-  width: 34vw;
 }
 .search input {
   background: transparent;
@@ -99,21 +102,29 @@ button {
 .toolbar {
   align-items: center;
   display: flex;
+  flex: 1 0 100%;
+  flex-wrap: wrap;
   gap: 6px;
-  margin-left: auto;
+  justify-content: flex-end;
+  margin-left: 0;
 }
 .filters {
   align-items: center;
   display: flex;
+  flex: 1 1 560px;
+  flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 .filterSelect {
   background: rgba(30, 30, 40, 0.72);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--muted-foreground);
+  flex: 1 1 128px;
   height: 30px;
-  max-width: 150px;
+  max-width: 190px;
+  min-width: 122px;
   outline: 0;
   padding: 0 8px;
 }
@@ -127,6 +138,7 @@ button {
   gap: 6px;
   height: 28px;
   padding: 0 10px;
+  white-space: nowrap;
 }
 .chip.active, .iconBtn.active {
   background: rgba(124, 77, 255, 0.18);
@@ -270,6 +282,11 @@ button {
 .node.dragging .nodeCore {
   r: 28px;
 }
+.nodeHitTarget {
+  cursor: pointer;
+  fill: transparent;
+  pointer-events: all;
+}
 .canvasShell.handMode .node,
 .canvasShell.handMode .edgeHitArea {
   cursor: grab;
@@ -379,6 +396,12 @@ button {
   border-radius: 8px;
   padding: 12px;
 }
+.reportCard.problem {
+  border: 1px solid rgba(248, 113, 113, 0.35);
+}
+.reportCard.warning {
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
 .reportValue {
   color: rgba(226, 226, 232, 0.82);
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -457,6 +480,55 @@ button {
   color: rgba(139, 139, 156, 0.7);
   line-height: 1.35;
   margin-top: 3px;
+}
+.issueRow {
+  background: rgba(30, 30, 40, 0.45);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: rgba(226, 226, 232, 0.82);
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  margin: 8px 0;
+  padding: 9px 10px;
+}
+.issueRow:hover {
+  background: rgba(124, 77, 255, 0.14);
+  border-color: rgba(124, 77, 255, 0.32);
+}
+.issueHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.severity {
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding: 3px 6px;
+  text-transform: uppercase;
+}
+.severity.error {
+  background: rgba(248, 113, 113, 0.16);
+  color: #f87171;
+}
+.severity.warning {
+  background: rgba(251, 191, 36, 0.14);
+  color: #fbbf24;
+}
+.issueMessage {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.issueMeta {
+  color: var(--muted-foreground);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 .inspectorHeader {
   align-items: flex-start;
@@ -791,6 +863,9 @@ $viewerDataJson
       <select id="sourceSetFilter" class="filterSelect"></select>
       <select id="packageFilter" class="filterSelect"></select>
       <select id="layerFilter" class="filterSelect"></select>
+      <select id="nodeTypeFilter" class="filterSelect"></select>
+      <select id="originFilter" class="filterSelect"></select>
+      <select id="issueFilter" class="filterSelect"></select>
     </div>
     <div class="toolbar">
       <button class="chip active" data-level="class">Class</button>
@@ -852,7 +927,10 @@ const state = {
     module: "",
     sourceSet: "",
     pkg: "",
-    layer: ""
+    layer: "",
+    nodeType: "",
+    origin: "",
+    issue: ""
   },
   activeTypes: new Set(["constructor", "property", "inheritance", "method", "return-type"]),
   search: "",
@@ -917,7 +995,10 @@ const filterElements = {
   module: document.getElementById("moduleFilter"),
   sourceSet: document.getElementById("sourceSetFilter"),
   pkg: document.getElementById("packageFilter"),
-  layer: document.getElementById("layerFilter")
+  layer: document.getElementById("layerFilter"),
+  nodeType: document.getElementById("nodeTypeFilter"),
+  origin: document.getElementById("originFilter"),
+  issue: document.getElementById("issueFilter")
 };
 
 function escapeHtml(value) {
@@ -929,12 +1010,34 @@ function escapeHtml(value) {
 }
 
 function classNodesByFilters() {
+  const issueNodeIds = issueScopedNodeIds();
   return data.nodes.filter(node => {
     return (!state.filters.module || node.module === state.filters.module)
       && (!state.filters.sourceSet || node.sourceSet === state.filters.sourceSet)
       && (!state.filters.pkg || node.pkg === state.filters.pkg)
-      && (!state.filters.layer || node.layer === state.filters.layer);
+      && (!state.filters.layer || node.layer === state.filters.layer)
+      && (!state.filters.nodeType || node.kind === state.filters.nodeType)
+      && (!state.filters.origin || node.origin === state.filters.origin)
+      && (!state.filters.issue || issueNodeIds.has(node.id));
   });
+}
+
+function issueScopedNodeIds() {
+  const ids = new Set();
+  if (!state.filters.issue) return ids;
+  const report = data.report || { cycles: [], violations: [], hotspots: [] };
+  if (state.filters.issue === "violations" || state.filters.issue === "problems") {
+    (report.violations || []).forEach(item => {
+      ids.add(item.from);
+      ids.add(item.to);
+    });
+  }
+  if (state.filters.issue === "cycles" || state.filters.issue === "problems") {
+    (report.cycles || []).forEach(cycle => {
+      (cycle.nodes || []).forEach(id => ids.add(id));
+    });
+  }
+  return ids;
 }
 
 function getLevelData() {
@@ -1176,6 +1279,13 @@ function selectEdge(edge) {
   renderAll();
 }
 
+function selectNode(nodeId) {
+  state.selectedEdgeKey = null;
+  state.hoveredEdgeKey = null;
+  state.selectedId = nodeId;
+  renderAll();
+}
+
 function openDependency(edge) {
   state.selectedEdgeKey = edgeKey(edge);
   state.hoveredEdgeKey = null;
@@ -1344,6 +1454,9 @@ function renderGraph() {
     group.style.opacity = faded ? "0.3" : neighbor ? "0.9" : "1";
     let dragStart = null;
     group.addEventListener("mousedown", event => {
+      if (event.button !== 0) {
+        return;
+      }
       if (state.handMode) {
         return;
       }
@@ -1354,28 +1467,27 @@ function renderGraph() {
         pos: { ...pos },
         moved: false
       };
-      state.draggingNodeId = node.id;
-      renderGraph();
       const move = moveEvent => {
         const dx = (moveEvent.clientX - dragStart.x) / state.zoom;
         const dy = (moveEvent.clientY - dragStart.y) / state.zoom;
         if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
           dragStart.moved = true;
+          state.draggingNodeId = node.id;
         }
-        state.nodePositions[node.id] = {
-          x: dragStart.pos.x + dx,
-          y: dragStart.pos.y + dy
-        };
-        scheduleGraphRender();
+        if (dragStart.moved) {
+          state.nodePositions[node.id] = {
+            x: dragStart.pos.x + dx,
+            y: dragStart.pos.y + dy
+          };
+          scheduleGraphRender();
+        }
       };
       const up = upEvent => {
         window.removeEventListener("mousemove", move);
         window.removeEventListener("mouseup", up);
         state.draggingNodeId = null;
         if (!dragStart.moved) {
-          state.selectedEdgeKey = null;
-          state.selectedId = state.selectedId === node.id ? null : node.id;
-          renderAll();
+          selectNode(node.id);
         } else {
           renderGraph();
         }
@@ -1384,9 +1496,27 @@ function renderGraph() {
       window.addEventListener("mousemove", move);
       window.addEventListener("mouseup", up);
     });
-    group.addEventListener("mouseenter", () => { state.hoveredId = node.id; renderGraph(); });
-    group.addEventListener("mouseleave", () => { state.hoveredId = null; renderGraph(); });
+    group.addEventListener("click", event => {
+      if (state.handMode || state.draggingNodeId === node.id) {
+        return;
+      }
+      event.stopPropagation();
+      selectNode(node.id);
+    });
+    group.addEventListener("mouseenter", () => {
+      if (state.hoveredId !== node.id) {
+        state.hoveredId = node.id;
+        renderGraph();
+      }
+    });
+    group.addEventListener("mouseleave", () => {
+      if (state.hoveredId === node.id) {
+        state.hoveredId = null;
+        renderGraph();
+      }
+    });
     group.innerHTML = `
+      <circle class="nodeHitTarget" r="48"></circle>
       ${'$'}{selected ? `<circle class="nodeRing" r="34" fill="none" stroke="${'$'}{color}" stroke-width="1.4" stroke-dasharray="4 3"></circle>` : ""}
       <circle class="nodeCore" r="27" fill="${'$'}{color}22" stroke="${'$'}{color}" stroke-width="${'$'}{selected ? 2 : 1.2}"></circle>
       <text y="4" text-anchor="middle" fill="${'$'}{color}" font-size="10" font-weight="700">${'$'}{kindAbbr[node.kind] || "N"}</text>
@@ -1530,6 +1660,9 @@ function renderInspector() {
 }
 
 function renderArchitectureReport() {
+  const report = data.report || { cycles: [], violations: [], hotspots: [] };
+  const errors = (report.violations || []).filter(item => item.severity === "error").length;
+  const warnings = (report.violations || []).filter(item => item.severity === "warning").length;
   return `
     <div class="report">
       <div class="sectionTitle">Architecture Report</div>
@@ -1538,7 +1671,23 @@ function renderArchitectureReport() {
         ${'$'}{reportCard(data.nodes.filter(node => String(node.kind).includes("function")).length, "Functions")}
         ${'$'}{reportCard(data.summary.packages, "Packages")}
         ${'$'}{reportCard(data.summary.dependencies, "Dependencies")}
+        ${'$'}{reportCard(errors, "Errors", errors ? "problem" : "")}
+        ${'$'}{reportCard(warnings, "Warnings", warnings ? "warning" : "")}
+        ${'$'}{reportCard((report.cycles || []).length, "Cycles", (report.cycles || []).length ? "warning" : "")}
+        ${'$'}{reportCard((report.hotspots || []).length, "Hotspots")}
       </div>
+      <section class="section" style="padding-left:0;padding-right:0">
+        <div class="sectionTitle">Layer Violations</div>
+        ${'$'}{renderViolationRows(report.violations || [])}
+      </section>
+      <section class="section" style="padding-left:0;padding-right:0">
+        <div class="sectionTitle">Dependency Cycles</div>
+        ${'$'}{renderCycleRows(report.cycles || [])}
+      </section>
+      <section class="section" style="padding-left:0;padding-right:0">
+        <div class="sectionTitle">Dependency Hotspots</div>
+        ${'$'}{renderHotspotRows(report.hotspots || [])}
+      </section>
       ${'$'}{renderDependencyExplorer()}
       <section class="section" style="padding-left:0;padding-right:0">
         <div class="sectionTitle">Dependencies By Type</div>
@@ -1556,8 +1705,64 @@ function renderArchitectureReport() {
   `;
 }
 
-function reportCard(value, label) {
-  return `<div class="reportCard"><div class="reportValue">${'$'}{escapeHtml(value)}</div><div class="reportLabel">${'$'}{escapeHtml(label)}</div></div>`;
+function reportCard(value, label, variant = "") {
+  return `<div class="reportCard ${'$'}{escapeHtml(variant)}"><div class="reportValue">${'$'}{escapeHtml(value)}</div><div class="reportLabel">${'$'}{escapeHtml(label)}</div></div>`;
+}
+
+function renderViolationRows(violations) {
+  if (!violations.length) {
+    return `<div class="dependencyEmpty">No layer violations detected.</div>`;
+  }
+  return violations.slice(0, 12).map(item => {
+    const edge = findEdge(item.from, item.to, item.edgeType);
+    const key = edge ? edgeKey(edge) : "";
+    return `
+      <div class="issueRow" data-edge-key="${'$'}{escapeHtml(key)}">
+        <div class="issueHeader">
+          <span class="severity ${'$'}{escapeHtml(item.severity)}">${'$'}{escapeHtml(item.severity)}</span>
+          <span class="issueMessage">${'$'}{escapeHtml(item.message)}</span>
+        </div>
+        <div class="issueMeta">${'$'}{escapeHtml(nodeLabel(item.from))} -> ${'$'}{escapeHtml(nodeLabel(item.to))} · ${'$'}{escapeHtml(item.edgeType)} · ${'$'}{escapeHtml(item.ruleId)}</div>
+      </div>
+    `;
+  }).join("") + (violations.length > 12 ? `<div class="dependencyEmpty">Showing 12 of ${'$'}{violations.length}. Use issue filters to narrow the graph.</div>` : "");
+}
+
+function renderCycleRows(cycles) {
+  if (!cycles.length) {
+    return `<div class="dependencyEmpty">No dependency cycles detected in strong architecture edges.</div>`;
+  }
+  return cycles.slice(0, 8).map((cycle, index) => {
+    const firstEdge = (cycle.edges || [])[0] || "";
+    const labels = (cycle.nodes || []).map(nodeLabel).join(" -> ");
+    return `
+      <div class="issueRow" data-edge-key="${'$'}{escapeHtml(firstEdge)}">
+        <div class="issueHeader">
+          <span class="severity warning">cycle</span>
+          <span class="issueMessage">Cycle ${'$'}{index + 1}</span>
+        </div>
+        <div class="issueMeta">${'$'}{escapeHtml(labels)}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderHotspotRows(hotspots) {
+  if (!hotspots.length) {
+    return `<div class="dependencyEmpty">No dependency hotspots detected.</div>`;
+  }
+  return hotspots.slice(0, 8).map(item => {
+    const node = nodeInfo(item.nodeId);
+    return `
+      <div class="issueRow" data-node-id="${'$'}{escapeHtml(item.nodeId)}">
+        <div class="issueHeader">
+          <span class="severity warning">hotspot</span>
+          <span class="issueMessage">${'$'}{escapeHtml(node.label)}</span>
+        </div>
+        <div class="issueMeta">fan in ${'$'}{item.fanIn} · fan out ${'$'}{item.fanOut} · total ${'$'}{item.total} · ${'$'}{escapeHtml(node.pkg)}</div>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderDependencyTypeRows() {
@@ -1704,6 +1909,10 @@ function findEdgeByKey(key) {
   return data.edges.find(edge => edgeKey(edge) === key);
 }
 
+function findEdge(from, to, type) {
+  return data.edges.find(edge => edge.from === from && edge.to === to && edge.type === type);
+}
+
 function bindDependencyRows() {
   inspectorEl.querySelectorAll("[data-edge-key]").forEach(item => {
     item.onmouseenter = () => {
@@ -1726,6 +1935,14 @@ function bindDependencyRows() {
       if (edge) {
         openDependency(edge);
       }
+    };
+  });
+  inspectorEl.querySelectorAll("[data-node-id]").forEach(item => {
+    item.onclick = event => {
+      event.stopPropagation();
+      state.selectedEdgeKey = null;
+      state.selectedId = item.getAttribute("data-node-id");
+      renderAll();
     };
   });
   inspectorEl.querySelectorAll("[data-show-imports]").forEach(button => {
@@ -1765,7 +1982,10 @@ function metric(label, value) {
 }
 
 function renderStatus() {
-  statusLeft.textContent = `${'$'}{data.summary.classes} classes · ${'$'}{data.summary.dependencies} dependencies · ${'$'}{data.summary.modules} modules · ${'$'}{data.summary.packages} packages`;
+  const report = data.report || { cycles: [], violations: [] };
+  const errors = (report.violations || []).filter(item => item.severity === "error").length;
+  const warnings = (report.violations || []).filter(item => item.severity === "warning").length;
+  statusLeft.textContent = `${'$'}{data.summary.classes} classes · ${'$'}{data.summary.dependencies} dependencies · ${'$'}{data.summary.modules} modules · ${'$'}{data.summary.packages} packages · ${'$'}{errors} errors · ${'$'}{warnings} warnings · ${'$'}{(report.cycles || []).length} cycles`;
 }
 
 function renderAll() {
@@ -1781,11 +2001,31 @@ function renderFilters() {
   fillFilter(filterElements.sourceSet, "All Source Sets", data.nodes.map(node => node.sourceSet), state.filters.sourceSet);
   fillFilter(filterElements.pkg, "All Packages", data.nodes.map(node => node.pkg), state.filters.pkg);
   fillFilter(filterElements.layer, "All Layers", data.nodes.map(node => node.layer), state.filters.layer);
+  fillFilter(filterElements.nodeType, "All Node Types", data.nodes.map(node => node.kind), state.filters.nodeType);
+  fillFilter(filterElements.origin, "All Origins", data.nodes.map(node => node.origin || "DECLARATION"), state.filters.origin);
+  fillStaticFilter(
+    filterElements.issue,
+    "All Issues",
+    [
+      ["problems", "Problems"],
+      ["violations", "Violations"],
+      ["cycles", "Cycles"]
+    ],
+    state.filters.issue
+  );
 }
 
 function fillFilter(element, label, values, selected) {
   const unique = Array.from(new Set(values)).sort();
   element.innerHTML = `<option value="">${'$'}{label}</option>` + unique.map(value => `<option value="${'$'}{escapeHtml(value)}" ${'$'}{value === selected ? "selected" : ""}>${'$'}{escapeHtml(value)}</option>`).join("");
+}
+
+function fillStaticFilter(element, label, values, selected) {
+  element.innerHTML =
+    `<option value="">${'$'}{label}</option>` +
+    values
+      .map(([value, text]) => `<option value="${'$'}{escapeHtml(value)}" ${'$'}{value === selected ? "selected" : ""}>${'$'}{escapeHtml(text)}</option>`)
+      .join("");
 }
 
 document.getElementById("searchInput").addEventListener("input", event => {
