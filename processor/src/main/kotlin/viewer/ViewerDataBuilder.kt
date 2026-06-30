@@ -48,14 +48,16 @@ class ViewerDataBuilder {
                     from = dependency.from,
                     to = dependency.to.qualifiedName,
                     type = "import",
-                    snippet = dependency.snippet
+                    snippet = dependency.snippet,
+                    context =
+                        "import:${dependency.snippet}"
                 )
             }
 
         val edges =
             (declarationEdges + importEdges)
                 .distinctBy {
-                    "${it.from}|${it.to}|${it.type}"
+                    "${it.from}|${it.to}|${it.type}|${it.context}"
                 }
 
         val nodes =
@@ -204,7 +206,7 @@ class ViewerDataBuilder {
                         .mapNotNull { (from, to) ->
                             edgeTypes["$from|$to"]
                                 ?.let {
-                                    "${it.from}|${it.to}|${it.type}"
+                                    "${it.from}|${it.to}|${it.type}|${it.context.ifBlank { "default" }}"
                                 }
                         }
 

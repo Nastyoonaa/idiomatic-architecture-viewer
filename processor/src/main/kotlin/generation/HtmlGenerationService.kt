@@ -76,16 +76,19 @@ class HtmlGenerationService(
                 )
                 .dependencies
 
+        val viewerData =
+            viewerDataBuilder.build(
+                declaredSymbols = declaredSymbols,
+                importedDependencies = importedDependencies,
+                declarationEdges = declarationEdges
+            )
+
         val html =
             architectureHtmlExporter
                 .export(
                     viewerDataJson =
                         viewerJsonEncoder.encode(
-                            viewerDataBuilder.build(
-                                declaredSymbols = declaredSymbols,
-                                importedDependencies = importedDependencies,
-                                declarationEdges = declarationEdges
-                            )
+                            viewerData
                         )
                 )
 
@@ -101,6 +104,22 @@ class HtmlGenerationService(
 
             content =
                 html
+        )
+
+        fileWriter.writeText(
+            packageName =
+                "com.example.generated.architecture",
+
+            fileName =
+                "architecture-snapshot",
+
+            extension =
+                "json",
+
+            content =
+                viewerJsonEncoder.encodeSnapshot(
+                    viewerData
+                )
         )
     }
 

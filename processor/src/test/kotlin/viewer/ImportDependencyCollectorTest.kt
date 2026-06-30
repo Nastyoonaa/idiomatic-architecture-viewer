@@ -110,7 +110,7 @@ class ImportDependencyCollectorTest {
 
         assertEquals(
             listOf(
-                "com.app.domain.MissingDependency"
+                "unresolved:com.app.domain.MissingDependency"
             ),
             result.map {
                 it.to.qualifiedName
@@ -187,4 +187,3 @@ class ImportDependencyCollectorTest {
         )
     }
 }
-

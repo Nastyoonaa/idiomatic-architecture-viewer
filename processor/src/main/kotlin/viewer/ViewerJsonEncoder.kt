@@ -6,6 +6,34 @@ class ViewerJsonEncoder {
         data: ViewerData
     ): String {
 
+        return encodeData(
+            data
+        )
+    }
+
+    fun encodeSnapshot(
+        data: ViewerData
+    ): String {
+
+        return buildString {
+            append("{")
+            appendField("schemaVersion", SNAPSHOT_SCHEMA_VERSION)
+            append(",")
+            appendField("generatedBy", "idiomatic-architecture-viewer")
+            append(",\"data\":")
+            append(
+                encodeData(
+                    data
+                )
+            )
+            append("}")
+        }
+    }
+
+    private fun encodeData(
+        data: ViewerData
+    ): String {
+
         return buildString {
             append("{")
             append("\"nodes\":")
@@ -77,6 +105,8 @@ class ViewerJsonEncoder {
         appendField("type", edge.type)
         append(",")
         appendField("snippet", edge.snippet)
+        append(",")
+        appendField("context", edge.context.ifBlank { "default" })
         append("}")
     }
 
@@ -219,6 +249,16 @@ class ViewerJsonEncoder {
 
     private fun StringBuilder.appendField(
         name: String,
+        value: Long
+    ) {
+        append("\"")
+        append(escape(name))
+        append("\":")
+        append(value)
+    }
+
+    private fun StringBuilder.appendField(
+        name: String,
         value: Boolean
     ) {
         append("\"")
@@ -242,5 +282,9 @@ class ViewerJsonEncoder {
                 }
             }
         }
+    }
+
+    companion object {
+        const val SNAPSHOT_SCHEMA_VERSION: Long = 1
     }
 }

@@ -31,7 +31,8 @@ data class ViewerEdge(
     val from: String,
     val to: String,
     val type: String,
-    val snippet: String
+    val snippet: String,
+    val context: String = "default"
 )
 
 data class ViewerTreeNode(

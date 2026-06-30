@@ -282,6 +282,14 @@ button {
 .node.dragging .nodeCore {
   r: 28px;
 }
+.node.snapshotAdded .nodeCore {
+  fill: rgba(34, 197, 94, 0.2);
+  stroke: #22c55e;
+  stroke-width: 2.2;
+}
+.node.snapshotAdded .nodeLabel {
+  fill: #dcfce7;
+}
 .nodeHitTarget {
   cursor: pointer;
   fill: transparent;
@@ -332,6 +340,12 @@ button {
 .edge.edge-import.active {
   opacity: 0.58;
   stroke-width: 1.05;
+}
+.edge.snapshotAdded {
+  marker-end: url(#arrowSnapshotAdded);
+  opacity: 0.9;
+  stroke: #22c55e;
+  stroke-width: 2;
 }
 .edge.dimmed {
   opacity: 0.07;
@@ -401,6 +415,63 @@ button {
 }
 .reportCard.warning {
   border: 1px solid rgba(251, 191, 36, 0.35);
+}
+.snapshotMetricCard {
+  display: grid;
+  gap: 10px;
+}
+.snapshotMetricHeader {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+.snapshotDelta {
+  border-radius: 999px;
+  color: rgba(226, 226, 232, 0.82);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 7px;
+}
+.snapshotDelta.added {
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+}
+.snapshotDelta.removed {
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
+}
+.snapshotMetricFlow {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+.snapshotMetricValue {
+  background: rgba(11, 11, 15, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: 7px;
+  min-width: 0;
+  padding: 8px;
+}
+.snapshotMetricNumber {
+  color: rgba(226, 226, 232, 0.88);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+.snapshotMetricCaption {
+  color: var(--muted-foreground);
+  font-size: 9px;
+  margin-top: 5px;
+  text-transform: uppercase;
+}
+.snapshotMetricArrow {
+  color: var(--muted-foreground);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
 }
 .reportValue {
   color: rgba(226, 226, 232, 0.82);
@@ -613,6 +684,52 @@ button {
   background: rgba(96, 165, 250, 0.16);
   border-color: rgba(96, 165, 250, 0.4);
   color: #60a5fa;
+}
+.snapshotControls {
+  display: grid;
+  gap: 8px;
+}
+.snapshotMessage {
+  border-radius: 8px;
+  color: rgba(226, 226, 232, 0.78);
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 9px 10px;
+}
+.snapshotMessage.error {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: #fecaca;
+}
+.snapshotMessage.info {
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.24);
+}
+.diffList {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+.diffRow {
+  background: rgba(30, 30, 40, 0.45);
+  border-radius: 8px;
+  color: rgba(226, 226, 232, 0.82);
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+}
+.diffRow.added {
+  border-left: 2px solid #22c55e;
+}
+.diffRow.removed {
+  border-left: 2px solid #f87171;
+}
+.diffMeta {
+  color: var(--muted-foreground);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 .dependencySearch {
   background: rgba(30, 30, 40, 0.72);
@@ -878,6 +995,8 @@ $viewerDataJson
       <button class="chip active" data-type="method">Method</button>
       <button class="chip active" data-type="return-type">Return</button>
       <button id="focusToggle" class="chip">Focus</button>
+      <button id="snapshotToggle" class="chip">Snapshot</button>
+      <input id="snapshotInput" class="hidden" type="file" accept="application/json,.json">
     </div>
   </header>
   <div class="main">
@@ -940,8 +1059,13 @@ const state = {
   nodePositions: {},
   draggingNodeId: null,
   graphFrame: null,
-  expanded: new Set()
+  expanded: new Set(),
+  snapshotMode: false,
+  snapshotError: "",
+  snapshotDiff: null,
+  snapshotData: null
 };
+const SNAPSHOT_SCHEMA_VERSION = 1;
 const layerColors = {
   presentation: "#a78bfa",
   domain: "#60a5fa",
@@ -990,6 +1114,7 @@ const inspectorEl = document.getElementById("inspector");
 const statusLeft = document.getElementById("statusLeft");
 const edgePanelEl = document.getElementById("edgePanel");
 const importNoticeEl = document.getElementById("importNotice");
+const snapshotInputEl = document.getElementById("snapshotInput");
 const canvasShell = document.querySelector(".canvasShell");
 const filterElements = {
   module: document.getElementById("moduleFilter"),
@@ -1233,7 +1358,11 @@ function connectedIds(id, edges) {
 }
 
 function edgeKey(edge) {
-  return `${'$'}{edge.from}|${'$'}{edge.to}|${'$'}{edge.type}`;
+  return `${'$'}{edge.from}|${'$'}{edge.to}|${'$'}{edge.type}|${'$'}{edgeContext(edge)}`;
+}
+
+function edgeContext(edge) {
+  return edge && edge.context ? edge.context : "default";
 }
 
 function nodeLabel(id) {
@@ -1254,6 +1383,83 @@ function nodeInfo(id) {
     resolved: false,
     layer: "external"
   };
+}
+
+function normalizeSnapshot(rawSnapshot) {
+  if (!rawSnapshot || typeof rawSnapshot !== "object") {
+    throw new Error("Snapshot file is not a valid JSON object.");
+  }
+  if (rawSnapshot.schemaVersion !== SNAPSHOT_SCHEMA_VERSION) {
+    throw new Error(`Unsupported snapshot schema version: ${'$'}{rawSnapshot.schemaVersion ?? "missing"}.`);
+  }
+  if (rawSnapshot.generatedBy !== "idiomatic-architecture-viewer") {
+    throw new Error("Snapshot was not generated by Idiomatic Architecture Viewer.");
+  }
+  const snapshotData = rawSnapshot.data;
+  if (!snapshotData || !Array.isArray(snapshotData.nodes) || !Array.isArray(snapshotData.edges)) {
+    throw new Error("Snapshot does not contain ViewerData nodes and edges.");
+  }
+  return snapshotData;
+}
+
+function computeSnapshotDiff(previousData, currentData) {
+  const previousNodes = new Map((previousData.nodes || []).map(node => [nodeIdentity(node), node]));
+  const currentNodes = new Map((currentData.nodes || []).map(node => [nodeIdentity(node), node]));
+  const previousEdges = new Map((previousData.edges || []).map(edge => [edgeKey(edge), edge]));
+  const currentEdges = new Map((currentData.edges || []).map(edge => [edgeKey(edge), edge]));
+  const addedNodes = [...currentNodes.entries()]
+    .filter(([id]) => !previousNodes.has(id))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, node]) => node);
+  const removedNodes = [...previousNodes.entries()]
+    .filter(([id]) => !currentNodes.has(id))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, node]) => node);
+  const unchangedNodes = [...currentNodes.entries()]
+    .filter(([id]) => previousNodes.has(id))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, node]) => node);
+  const addedEdges = [...currentEdges.entries()]
+    .filter(([id]) => !previousEdges.has(id))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, edge]) => edge);
+  const removedEdges = [...previousEdges.entries()]
+    .filter(([id]) => !currentEdges.has(id))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, edge]) => edge);
+  return {
+    addedNodes,
+    removedNodes,
+    unchangedNodes,
+    addedEdges,
+    removedEdges,
+    metricsDiff: {
+      nodes: metricDiff(previousData.nodes?.length || 0, currentData.nodes?.length || 0),
+      edges: metricDiff(previousData.edges?.length || 0, currentData.edges?.length || 0),
+      violations: metricDiff(previousData.report?.violations?.length || 0, currentData.report?.violations?.length || 0),
+      cycles: metricDiff(previousData.report?.cycles?.length || 0, currentData.report?.cycles?.length || 0)
+    }
+  };
+}
+
+function metricDiff(before, after) {
+  return {
+    before,
+    after,
+    delta: after - before
+  };
+}
+
+function nodeIdentity(node) {
+  return node && node.id ? node.id : "";
+}
+
+function snapshotAddedNodeIds() {
+  return new Set((state.snapshotDiff?.addedNodes || []).map(nodeIdentity));
+}
+
+function snapshotAddedEdgeIds() {
+  return new Set((state.snapshotDiff?.addedEdges || []).map(edgeKey));
 }
 
 function dependencyReason(edge) {
@@ -1385,6 +1591,8 @@ function renderGraph() {
     || state.selectedEdgeKey;
   const selectedEdge = findEdgeByKey(highlightedEdgeKey);
   const selectedEdgeIds = selectedEdge ? new Set([selectedEdge.from, selectedEdge.to]) : null;
+  const addedNodeIds = state.snapshotMode ? snapshotAddedNodeIds() : new Set();
+  const addedEdgeIds = state.snapshotMode ? snapshotAddedEdgeIds() : new Set();
   graph.innerHTML = `
     <defs>
       <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -1398,6 +1606,9 @@ function renderGraph() {
       </marker>
       <marker id="arrowImport" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
         <path d="M0,0 L0,6 L6,3 z" fill="rgba(96,165,250,0.32)"></path>
+      </marker>
+      <marker id="arrowSnapshotAdded" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L6,3 z" fill="#22c55e"></path>
       </marker>
     </defs>
     <rect width="100%" height="100%" fill="url(#grid)"></rect>
@@ -1418,6 +1629,7 @@ function renderGraph() {
     const isActiveEdge = edge.type === "import" ? isSelectedEdge : isSelectedEdge || isConnectedEdge;
     const pathClasses = ["edge", `edge-${'$'}{edge.type}`];
     if (isActiveEdge) pathClasses.push("active");
+    if (addedEdgeIds.has(edgeKey(edge))) pathClasses.push("snapshotAdded");
     if (activeId && !isConnectedEdge && !isSelectedEdge) pathClasses.push("dimmed");
     if (!activeId && selectedEdgeIds && !isSelectedEdge) pathClasses.push("dimmed");
     path.setAttribute("class", pathClasses.join(" "));
@@ -1449,7 +1661,7 @@ function renderGraph() {
     const selected = node.id === state.selectedId;
     const dragging = node.id === state.draggingNodeId;
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    group.setAttribute("class", ["node", selected ? "selected" : "", dragging ? "dragging" : ""].filter(Boolean).join(" "));
+    group.setAttribute("class", ["node", selected ? "selected" : "", dragging ? "dragging" : "", addedNodeIds.has(node.id) ? "snapshotAdded" : ""].filter(Boolean).join(" "));
     group.setAttribute("transform", `translate(${'$'}{pos.x},${'$'}{pos.y})`);
     group.style.opacity = faded ? "0.3" : neighbor ? "0.9" : "1";
     let dragStart = null;
@@ -1600,8 +1812,12 @@ function findTreeNode(id, nodes) {
 function renderInspector() {
   const node = data.nodes.find(item => item.id === state.selectedId);
   if (!node) {
-    inspectorEl.innerHTML = renderArchitectureReport();
+    inspectorEl.innerHTML =
+      state.snapshotMode
+        ? renderSnapshotPanel()
+        : renderArchitectureReport();
     bindDependencyRows();
+    bindSnapshotControls();
     return;
   }
   const outgoing = data.edges.filter(edge => edge.from === node.id);
@@ -1657,6 +1873,98 @@ function renderInspector() {
     });
   });
   bindDependencyRows();
+}
+
+function renderSnapshotPanel() {
+  const diff = state.snapshotDiff;
+  return `
+    <div class="report">
+      <div class="sectionTitle">Snapshot Mode</div>
+      <section class="section" style="padding-left:0;padding-right:0">
+        <div class="snapshotControls">
+          <button class="chip showImportsButton" data-load-snapshot>Load Snapshot</button>
+          <button class="chip showImportsButton ${'$'}{diff ? "active" : ""}" data-clear-snapshot>Clear Snapshot</button>
+          ${'$'}{state.snapshotError ? `<div class="snapshotMessage error">${'$'}{escapeHtml(state.snapshotError)}</div>` : ""}
+          ${'$'}{!diff && !state.snapshotError ? `<div class="snapshotMessage info">Load an older architecture-snapshot.json to compare it with the current full graph.</div>` : ""}
+        </div>
+      </section>
+      ${'$'}{diff ? renderSnapshotDiff(diff) : ""}
+    </div>
+  `;
+}
+
+function renderSnapshotDiff(diff) {
+  const hasChanges =
+    diff.addedNodes.length ||
+    diff.removedNodes.length ||
+    diff.addedEdges.length ||
+    diff.removedEdges.length ||
+    diff.metricsDiff.violations.delta ||
+    diff.metricsDiff.cycles.delta;
+  return `
+    <section class="section" style="padding-left:0;padding-right:0">
+      <div class="sectionTitle">Architecture Diff</div>
+      ${'$'}{hasChanges ? "" : `<div class="snapshotMessage info" style="margin-bottom:10px">No architecture changes detected for this snapshot.</div>`}
+      <div class="reportGrid">
+        ${'$'}{snapshotMetricCard(diff.metricsDiff.nodes, "Nodes")}
+        ${'$'}{snapshotMetricCard(diff.metricsDiff.edges, "Dependencies")}
+        ${'$'}{snapshotMetricCard(diff.metricsDiff.violations, "Violations")}
+        ${'$'}{snapshotMetricCard(diff.metricsDiff.cycles, "Cycles")}
+      </div>
+    </section>
+    ${'$'}{renderDiffSection("Added Nodes", diff.addedNodes, "added", node => node.label, node => `${'$'}{node.kind} · ${'$'}{node.pkg}`)}
+    ${'$'}{renderDiffSection("Removed Nodes", diff.removedNodes, "removed", node => node.label, node => `${'$'}{node.kind} · ${'$'}{node.pkg}`)}
+    ${'$'}{renderDiffSection("Added Dependencies", diff.addedEdges, "added", edge => `${'$'}{nodeLabel(edge.from)} -> ${'$'}{nodeLabel(edge.to)}`, edge => `${'$'}{edge.type} · ${'$'}{edgeContext(edge)}`)}
+    ${'$'}{renderDiffSection("Removed Dependencies", diff.removedEdges, "removed", edge => `${'$'}{snapshotNodeLabel(edge.from)} -> ${'$'}{snapshotNodeLabel(edge.to)}`, edge => `${'$'}{edge.type} · ${'$'}{edgeContext(edge)}`)}
+  `;
+}
+
+function snapshotMetricCard(metricValue, label) {
+  const delta = metricValue.delta;
+  const sign = delta > 0 ? "+" : "";
+  const deltaClass = delta > 0 ? "added" : delta < 0 ? "removed" : "";
+  return `
+    <div class="reportCard snapshotMetricCard">
+      <div class="snapshotMetricHeader">
+        <div class="reportLabel" style="margin-top:0">${'$'}{escapeHtml(label)}</div>
+        <div class="snapshotDelta ${'$'}{deltaClass}">${'$'}{sign}${'$'}{delta}</div>
+      </div>
+      <div class="snapshotMetricFlow">
+        <div class="snapshotMetricValue">
+          <div class="snapshotMetricNumber">${'$'}{metricValue.before}</div>
+          <div class="snapshotMetricCaption">Before</div>
+        </div>
+        <div class="snapshotMetricArrow">-></div>
+        <div class="snapshotMetricValue">
+          <div class="snapshotMetricNumber">${'$'}{metricValue.after}</div>
+          <div class="snapshotMetricCaption">After</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderDiffSection(title, values, variant, titleSelector, metaSelector) {
+  const visible = values.slice(0, 40);
+  return `
+    <section class="section" style="padding-left:0;padding-right:0">
+      <div class="sectionTitle">${'$'}{escapeHtml(title)} (${'$'}{values.length})</div>
+      ${'$'}{values.length ? `<div class="diffList">${'$'}{visible.map(item => `
+        <div class="diffRow ${'$'}{escapeHtml(variant)}">
+          <div>${'$'}{escapeHtml(titleSelector(item))}</div>
+          <div class="diffMeta">${'$'}{escapeHtml(metaSelector(item))}</div>
+        </div>
+      `).join("")}</div>` : `<div class="dependencyEmpty">None</div>`}
+      ${'$'}{values.length > visible.length ? `<div class="dependencyEmpty">Showing ${'$'}{visible.length} of ${'$'}{values.length}.</div>` : ""}
+    </section>
+  `;
+}
+
+function snapshotNodeLabel(id) {
+  const node =
+    state.snapshotData?.nodes?.find(item => item.id === id)
+    || data.nodes.find(item => item.id === id);
+  return node ? node.label : String(id).split(".").at(-1);
 }
 
 function renderArchitectureReport() {
@@ -1977,6 +2285,29 @@ function bindDependencyRows() {
   });
 }
 
+function bindSnapshotControls() {
+  inspectorEl.querySelectorAll("[data-load-snapshot]").forEach(button => {
+    button.onclick = event => {
+      event.stopPropagation();
+      snapshotInputEl.value = "";
+      snapshotInputEl.click();
+    };
+  });
+  inspectorEl.querySelectorAll("[data-clear-snapshot]").forEach(button => {
+    button.onclick = event => {
+      event.stopPropagation();
+      clearSnapshot();
+    };
+  });
+}
+
+function clearSnapshot() {
+  state.snapshotDiff = null;
+  state.snapshotData = null;
+  state.snapshotError = "";
+  renderAll();
+}
+
 function metric(label, value) {
   return `<div class="metric"><div class="metricLabel">${'$'}{label}</div><div class="metricValue">${'$'}{value}</div></div>`;
 }
@@ -2062,6 +2393,49 @@ document.getElementById("focusToggle").addEventListener("click", event => {
   state.focusMode = !state.focusMode;
   event.currentTarget.classList.toggle("active", state.focusMode);
   renderGraph();
+});
+document.getElementById("snapshotToggle").addEventListener("click", event => {
+  state.snapshotMode = !state.snapshotMode;
+  event.currentTarget.classList.toggle("active", state.snapshotMode);
+  state.selectedId = null;
+  state.selectedEdgeKey = null;
+  renderAll();
+});
+snapshotInputEl.addEventListener("change", event => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const rawSnapshot = JSON.parse(String(reader.result || ""));
+      const snapshotData = normalizeSnapshot(rawSnapshot);
+      state.snapshotData = snapshotData;
+      state.snapshotDiff = computeSnapshotDiff(snapshotData, data);
+      state.snapshotError = "";
+      state.snapshotMode = true;
+      document.getElementById("snapshotToggle").classList.add("active");
+    } catch (error) {
+      state.snapshotData = null;
+      state.snapshotDiff = null;
+      state.snapshotError = error && error.message ? error.message : "Snapshot could not be loaded.";
+      state.snapshotMode = true;
+      document.getElementById("snapshotToggle").classList.add("active");
+    }
+    state.selectedId = null;
+    state.selectedEdgeKey = null;
+    renderAll();
+  };
+  reader.onerror = () => {
+    state.snapshotData = null;
+    state.snapshotDiff = null;
+    state.snapshotError = "Snapshot file could not be read.";
+    state.snapshotMode = true;
+    document.getElementById("snapshotToggle").classList.add("active");
+    renderAll();
+  };
+  reader.readAsText(file);
 });
 document.getElementById("handTool").addEventListener("click", event => {
   state.handMode = !state.handMode;
