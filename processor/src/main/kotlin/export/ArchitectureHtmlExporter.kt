@@ -145,6 +145,11 @@ button {
   border-color: rgba(124, 77, 255, 0.42);
   color: var(--primary);
 }
+.chip:disabled,
+.iconBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
 .main {
   display: flex;
   flex: 1;
@@ -341,6 +346,18 @@ button {
   opacity: 0.58;
   stroke-width: 1.05;
 }
+.edge.edge-call {
+  marker-end: url(#arrowCall);
+  opacity: 0.5;
+  stroke: #fb7185;
+  stroke-width: 1;
+}
+.edge.edge-call.active {
+  marker-end: url(#arrowCallActive);
+  opacity: 0.92;
+  stroke: #fb7185;
+  stroke-width: 1.8;
+}
 .edge.snapshotAdded {
   marker-end: url(#arrowSnapshotAdded);
   opacity: 0.9;
@@ -533,6 +550,13 @@ button {
     transparent 2px 6px
   );
 }
+.typeLine.line-call {
+  background: repeating-linear-gradient(
+    to right,
+    currentColor 0 3px,
+    transparent 3px 6px
+  );
+}
 .typeCount {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 11px;
@@ -704,6 +728,16 @@ button {
 .snapshotMessage.info {
   background: rgba(96, 165, 250, 0.1);
   border: 1px solid rgba(96, 165, 250, 0.24);
+}
+.callGraphStatus {
+  background: rgba(251, 113, 133, 0.1);
+  border: 1px solid rgba(251, 113, 133, 0.24);
+  border-radius: 8px;
+  color: rgba(226, 226, 232, 0.78);
+  font-size: 11px;
+  line-height: 1.45;
+  margin-bottom: 10px;
+  padding: 9px 10px;
 }
 .diffList {
   display: grid;
@@ -893,6 +927,13 @@ button {
     transparent 2px 6px
   );
 }
+.edgeArrow.line-call {
+  background: repeating-linear-gradient(
+    to right,
+    currentColor 0 3px,
+    transparent 3px 6px
+  );
+}
 .edgeArrow::after {
   border-right: 2px solid currentColor;
   border-top: 2px solid currentColor;
@@ -994,9 +1035,12 @@ $viewerDataJson
       <button class="chip active" data-type="inheritance">Inheritance</button>
       <button class="chip active" data-type="method">Method</button>
       <button class="chip active" data-type="return-type">Return</button>
+      <button class="chip" data-type="call" disabled title="Load a call graph layer to enable call edges">Call</button>
       <button id="focusToggle" class="chip">Focus</button>
       <button id="snapshotToggle" class="chip">Snapshot</button>
+      <button id="callGraphToggle" class="chip" title="Load optional architecture-callgraph.json overlay">Load Call Graph</button>
       <input id="snapshotInput" class="hidden" type="file" accept="application/json,.json">
+      <input id="callGraphInput" class="hidden" type="file" accept="application/json,.json">
     </div>
   </header>
   <div class="main">
@@ -1063,9 +1107,12 @@ const state = {
   snapshotMode: false,
   snapshotError: "",
   snapshotDiff: null,
-  snapshotData: null
+  snapshotData: null,
+  callGraphLayer: null,
+  callGraphError: ""
 };
 const SNAPSHOT_SCHEMA_VERSION = 1;
+const CALL_GRAPH_SCHEMA_VERSION = 1;
 const layerColors = {
   presentation: "#a78bfa",
   domain: "#60a5fa",
@@ -1076,6 +1123,7 @@ const layerColors = {
 const typeDash = {
   constructor: "",
   import: "2 5",
+  call: "3 3",
   property: "8 4",
   inheritance: "",
   method: "2 4 8 4",
@@ -1102,6 +1150,7 @@ const kindAbbr = {
 const analyzerMeta = {
   constructor: { label: "Constructor", abbr: "C", analyzer: "Constructor Analyzer", confidence: "Strong", color: "#34d399" },
   import: { label: "Import", abbr: "I", analyzer: "Import Analyzer", confidence: "Informational", color: "#60a5fa" },
+  call: { label: "Call", abbr: "CL", analyzer: "Call Graph Layer", confidence: "Static approximation", color: "#fb7185" },
   property: { label: "Property", abbr: "P", analyzer: "Property Analyzer", confidence: "Medium", color: "#fbbf24" },
   inheritance: { label: "Inheritance", abbr: "H", analyzer: "Inheritance Analyzer", confidence: "Strong", color: "#34d399" },
   method: { label: "Method Param", abbr: "M", analyzer: "Method Parameter Analyzer", confidence: "Medium", color: "#fbbf24" },
@@ -1115,6 +1164,7 @@ const statusLeft = document.getElementById("statusLeft");
 const edgePanelEl = document.getElementById("edgePanel");
 const importNoticeEl = document.getElementById("importNotice");
 const snapshotInputEl = document.getElementById("snapshotInput");
+const callGraphInputEl = document.getElementById("callGraphInput");
 const canvasShell = document.querySelector(".canvasShell");
 const filterElements = {
   module: document.getElementById("moduleFilter"),
@@ -1134,9 +1184,45 @@ function escapeHtml(value) {
     .replaceAll("\"", "&quot;");
 }
 
+function baseNodes() {
+  return data.nodes;
+}
+
+function baseEdges() {
+  return data.edges;
+}
+
+function callGraphNodes() {
+  return state.callGraphLayer?.nodes || [];
+}
+
+function callGraphEdges() {
+  if (!state.callGraphLayer || !state.activeTypes.has("call")) {
+    return [];
+  }
+  return state.callGraphLayer.edges || [];
+}
+
+function modelNodes() {
+  const byId = new Map(baseNodes().map(node => [node.id, node]));
+  callGraphNodes().forEach(node => {
+    if (!byId.has(node.id)) {
+      byId.set(node.id, node);
+    }
+  });
+  return [...byId.values()];
+}
+
+function modelEdges() {
+  return [
+    ...baseEdges(),
+    ...callGraphEdges()
+  ];
+}
+
 function classNodesByFilters() {
   const issueNodeIds = issueScopedNodeIds();
-  return data.nodes.filter(node => {
+  return modelNodes().filter(node => {
     return (!state.filters.module || node.module === state.filters.module)
       && (!state.filters.sourceSet || node.sourceSet === state.filters.sourceSet)
       && (!state.filters.pkg || node.pkg === state.filters.pkg)
@@ -1168,7 +1254,7 @@ function issueScopedNodeIds() {
 function getLevelData() {
   const classNodes = classNodesByFilters();
   const classIds = new Set(classNodes.map(node => node.id));
-  const classEdges = data.edges.filter(edge => classIds.has(edge.from) && classIds.has(edge.to));
+  const classEdges = modelEdges().filter(edge => classIds.has(edge.from) && classIds.has(edge.to));
   if (state.level === "class") {
     return { nodes: classNodes, edges: classEdges };
   }
@@ -1210,7 +1296,7 @@ function getLevelData() {
     const edgeKey = `${'$'}{from}|${'$'}{to}|${'$'}{edge.type}`;
     if (seen.has(edgeKey)) return;
     seen.add(edgeKey);
-    edges.push({ from, to, type: edge.type, snippet: edge.snippet });
+    edges.push({ from, to, type: edge.type, snippet: edge.snippet, context: edgeContext(edge) });
   });
   const nodes = Array.from(groups.values()).map(node => ({
     ...node,
@@ -1366,12 +1452,12 @@ function edgeContext(edge) {
 }
 
 function nodeLabel(id) {
-  const node = data.nodes.find(item => item.id === id);
+  const node = modelNodes().find(item => item.id === id);
   return node ? node.label : String(id).split(".").at(-1);
 }
 
 function nodeInfo(id) {
-  return data.nodes.find(item => item.id === id) || {
+  return modelNodes().find(item => item.id === id) || {
     id,
     label: nodeLabel(id),
     pkg: "",
@@ -1400,6 +1486,112 @@ function normalizeSnapshot(rawSnapshot) {
     throw new Error("Snapshot does not contain ViewerData nodes and edges.");
   }
   return snapshotData;
+}
+
+function normalizeCallGraph(rawCallGraph) {
+  if (!rawCallGraph || typeof rawCallGraph !== "object") {
+    throw new Error("Call graph file is not a valid JSON object.");
+  }
+  if (rawCallGraph.schemaVersion !== CALL_GRAPH_SCHEMA_VERSION) {
+    throw new Error(`Unsupported call graph schema version: ${'$'}{rawCallGraph.schemaVersion ?? "missing"}.`);
+  }
+  if (rawCallGraph.generatedBy && rawCallGraph.generatedBy !== "idiomatic-architecture-viewer-callgraph") {
+    throw new Error("Call graph was not generated by Idiomatic Architecture Viewer CallGraph.");
+  }
+  const rawNodes = Array.isArray(rawCallGraph.nodes)
+    ? rawCallGraph.nodes
+    : Array.isArray(rawCallGraph.data?.nodes)
+      ? rawCallGraph.data.nodes
+      : [];
+  const rawEdges = Array.isArray(rawCallGraph.edges)
+    ? rawCallGraph.edges
+    : Array.isArray(rawCallGraph.data?.edges)
+      ? rawCallGraph.data.edges
+      : null;
+  if (!Array.isArray(rawEdges)) {
+    throw new Error("Call graph does not contain an edges array.");
+  }
+  const baseNodeIds = new Set(baseNodes().map(node => node.id));
+  const providedNodes = new Map();
+  rawNodes.forEach(node => {
+    if (node && typeof node.id === "string" && node.id.trim()) {
+      providedNodes.set(node.id, normalizeCallGraphNode(node, true));
+    }
+  });
+  const overlayNodes = new Map();
+  const overlayEdges = new Map();
+  rawEdges.forEach(edge => {
+    if (!edge || typeof edge.from !== "string" || typeof edge.to !== "string") {
+      return;
+    }
+    const from = edge.from.trim();
+    const to = edge.to.trim();
+    if (!from || !to) {
+      return;
+    }
+    const normalizedEdge = {
+      from,
+      to,
+      type: "call",
+      snippet: String(edge.snippet || edge.rawExpression || `${'$'}{from} -> ${'$'}{to}`),
+      context: String(edge.context || "method-body").trim() || "default",
+      origin: "CALL_GRAPH"
+    };
+    overlayEdges.set(edgeKey(normalizedEdge), normalizedEdge);
+    [from, to].forEach(id => {
+      if (!baseNodeIds.has(id) && !providedNodes.has(id) && !overlayNodes.has(id)) {
+        overlayNodes.set(id, inferredCallGraphNode(id));
+      }
+    });
+  });
+  providedNodes.forEach((node, id) => {
+    if (!baseNodeIds.has(id)) {
+      overlayNodes.set(id, node);
+    }
+  });
+  return {
+    nodes: [...overlayNodes.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    edges: [...overlayEdges.values()].sort((left, right) => edgeKey(left).localeCompare(edgeKey(right)))
+  };
+}
+
+function normalizeCallGraphNode(node, resolved) {
+  const id = String(node.id);
+  const label = String(node.label || id.split(".").at(-1));
+  return {
+    id,
+    label,
+    pkg: String(node.pkg || node.packageName || id.split(".").slice(0, -1).join(".")),
+    module: String(node.module || node.moduleName || "callgraph"),
+    sourceSet: String(node.sourceSet || node.sourceSetName || "unknown"),
+    file: String(node.file || node.fileName || "callgraph"),
+    kind: String(node.kind || "function"),
+    origin: "CALL_GRAPH",
+    resolved: node.resolved === false ? false : resolved,
+    layer: String(node.layer || "external"),
+    methods: Number(node.methods || 0),
+    properties: Number(node.properties || 0),
+    isComposable: Boolean(node.isComposable),
+    platformModifier: String(node.platformModifier || "NONE"),
+    fanIn: 0,
+    fanOut: 0
+  };
+}
+
+function inferredCallGraphNode(id) {
+  const unresolved = id.startsWith("unresolved:call:");
+  const displayId = unresolved ? id.replace("unresolved:call:", "") : id;
+  return normalizeCallGraphNode(
+    {
+      id,
+      label: displayId.split(".").at(-1),
+      pkg: unresolved ? "unresolved.call" : displayId.split(".").slice(0, -1).join("."),
+      kind: unresolved ? "unknown" : "function",
+      resolved: !unresolved,
+      layer: "external"
+    },
+    !unresolved
+  );
 }
 
 function computeSnapshotDiff(previousData, currentData) {
@@ -1472,6 +1664,7 @@ function dependencyReason(edge) {
     case "return-type": return `${'$'}{to} is used as a return type in ${'$'}{from}`;
     case "inheritance": return `${'$'}{from} extends or implements ${'$'}{to}`;
     case "import": return `${'$'}{to} is imported into ${'$'}{from}`;
+    case "call": return `${'$'}{from} calls ${'$'}{to} in method body`;
     case "annotation": return `${'$'}{to} is applied as an annotation in ${'$'}{from}`;
     default: return `${'$'}{from} depends on ${'$'}{to}`;
   }
@@ -1502,7 +1695,7 @@ function openDependency(edge) {
 
 function explorerBaseEdges(scopeId) {
   const visibleNodeIds = new Set(classNodesByFilters().map(node => node.id));
-  return data.edges.filter(edge => {
+  return modelEdges().filter(edge => {
     return visibleNodeIds.has(edge.from)
       && visibleNodeIds.has(edge.to)
       && (!scopeId || edge.from === scopeId || edge.to === scopeId);
@@ -1606,6 +1799,12 @@ function renderGraph() {
       </marker>
       <marker id="arrowImport" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
         <path d="M0,0 L0,6 L6,3 z" fill="rgba(96,165,250,0.32)"></path>
+      </marker>
+      <marker id="arrowCall" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L6,3 z" fill="rgba(251,113,133,0.55)"></path>
+      </marker>
+      <marker id="arrowCallActive" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L6,3 z" fill="#fb7185"></path>
       </marker>
       <marker id="arrowSnapshotAdded" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
         <path d="M0,0 L0,6 L6,3 z" fill="#22c55e"></path>
@@ -1810,7 +2009,7 @@ function findTreeNode(id, nodes) {
 }
 
 function renderInspector() {
-  const node = data.nodes.find(item => item.id === state.selectedId);
+  const node = modelNodes().find(item => item.id === state.selectedId);
   if (!node) {
     inspectorEl.innerHTML =
       state.snapshotMode
@@ -1818,10 +2017,11 @@ function renderInspector() {
         : renderArchitectureReport();
     bindDependencyRows();
     bindSnapshotControls();
+    bindCallGraphControls();
     return;
   }
-  const outgoing = data.edges.filter(edge => edge.from === node.id);
-  const incoming = data.edges.filter(edge => edge.to === node.id);
+  const outgoing = modelEdges().filter(edge => edge.from === node.id);
+  const incoming = modelEdges().filter(edge => edge.to === node.id);
   inspectorEl.innerHTML = `
     <div class="inspectorHeader">
       <div class="nodeBadge" style="background:${'$'}{layerColors[node.layer]}22;color:${'$'}{layerColors[node.layer]}">${'$'}{kindAbbr[node.kind] || "C"}</div>
@@ -1973,6 +2173,7 @@ function renderArchitectureReport() {
   const warnings = (report.violations || []).filter(item => item.severity === "warning").length;
   return `
     <div class="report">
+      ${'$'}{renderCallGraphStatus()}
       <div class="sectionTitle">Architecture Report</div>
       <div class="reportGrid">
         ${'$'}{reportCard(data.summary.classes, "Classes")}
@@ -2009,6 +2210,24 @@ function renderArchitectureReport() {
         <div class="sectionTitle">Planned Analyzers</div>
         <div class="analysisItem planned"><i class="dot" style="border:1px solid var(--muted-foreground)"></i><span>Annotation Analyzer</span><span class="analysisCount">planned</span></div>
       </section>
+    </div>
+  `;
+}
+
+function renderCallGraphStatus() {
+  if (state.callGraphError) {
+    return `<div class="callGraphStatus" style="border-color:rgba(248,113,113,.32);background:rgba(248,113,113,.12)">Call graph could not be loaded: ${'$'}{escapeHtml(state.callGraphError)}</div>`;
+  }
+  if (!state.callGraphLayer) {
+    return "";
+  }
+  return `
+    <div class="callGraphStatus">
+      <div style="font-weight:700;margin-bottom:4px">Call Graph overlay loaded</div>
+      <div>${'$'}{state.callGraphLayer.edges.length} call edges · ${'$'}{state.callGraphLayer.nodes.length} overlay nodes</div>
+      <div style="margin-top:4px;color:var(--muted-foreground)">Merged in memory only. Base snapshot and architecture diff are unchanged.</div>
+      <div style="margin-top:4px;color:var(--muted-foreground)">This is an optional layer for future compiler-level call graph analyzers.</div>
+      <button class="chip showImportsButton active" data-clear-callgraph>Clear Call Graph</button>
     </div>
   `;
 }
@@ -2074,10 +2293,10 @@ function renderHotspotRows(hotspots) {
 }
 
 function renderDependencyTypeRows() {
-  const types = ["constructor", "inheritance", "property", "return-type", "method", "import"];
+  const types = ["constructor", "inheritance", "property", "return-type", "method", "import", "call"];
   return types.map(type => {
     const meta = analyzerMeta[type];
-    const count = data.edges.filter(edge => edge.type === type).length;
+    const count = modelEdges().filter(edge => edge.type === type).length;
     return `<div class="typeRow"><span class="typeLine line-${'$'}{escapeHtml(type)}" style="color:${'$'}{meta.color}"></span><span>${'$'}{escapeHtml(meta.label)}</span><span class="typeCount">${'$'}{count}</span></div>`;
   }).join("");
 }
@@ -2089,21 +2308,22 @@ function renderAnalyzerRows() {
     property: "Detects dependencies declared as class-level properties.",
     "return-type": "Detects types referenced as function return types.",
     method: "Detects dependencies used as function parameter types.",
-    import: "Detects imported project classes and objects."
+    import: "Detects imported project classes and objects.",
+    call: "Displays optional static call graph edges loaded as an overlay."
   };
-  return ["constructor", "inheritance", "property", "return-type", "method", "import"].map(type => {
+  return ["constructor", "inheritance", "property", "return-type", "method", "import", "call"].map(type => {
     const meta = analyzerMeta[type];
     return `<div class="analyzerRow"><i class="dot" style="background:transparent;border:1px solid ${'$'}{meta.color}"></i><div><div class="analyzerName">${'$'}{escapeHtml(meta.analyzer)}</div><div class="analyzerDescription">${'$'}{escapeHtml(descriptions[type])}</div></div></div>`;
   }).join("");
 }
 
 function renderAnalysisItems(node) {
-  const implemented = ["constructor", "inheritance", "property", "return-type", "method", "import"];
+  const implemented = ["constructor", "inheritance", "property", "return-type", "method", "import", "call"];
   const planned = ["annotation"];
   return `
     ${'$'}{implemented.map(type => {
       const meta = analyzerMeta[type];
-      const count = data.edges.filter(edge => (edge.from === node.id || edge.to === node.id) && edge.type === type).length;
+      const count = modelEdges().filter(edge => (edge.from === node.id || edge.to === node.id) && edge.type === type).length;
       return `<div class="analysisItem ${'$'}{count ? "active" : ""}"><i class="dot" style="background:${'$'}{count ? meta.color : "transparent"};border:1px solid ${'$'}{meta.color}"></i><span>${'$'}{escapeHtml(meta.label)}</span><span class="analysisCount">${'$'}{count || ""}</span></div>`;
     }).join("")}
     <div class="edgeKicker" style="margin-top:14px">Planned</div>
@@ -2115,7 +2335,7 @@ function renderEdgePanel() {
   const { edges } = filteredData();
   const edge =
     edges.find(item => edgeKey(item) === state.selectedEdgeKey)
-    || data.edges.find(item => edgeKey(item) === state.selectedEdgeKey);
+    || modelEdges().find(item => edgeKey(item) === state.selectedEdgeKey);
   if (!edge) {
     edgePanelEl.classList.add("hidden");
     canvasShell.classList.remove("hasEdgePanel");
@@ -2165,7 +2385,7 @@ function symbolSubtitle(node) {
 }
 
 function nodeHasImportDependencies(nodeId) {
-  return data.edges.some(edge => edge.type === "import" && (edge.from === nodeId || edge.to === nodeId));
+  return modelEdges().some(edge => edge.type === "import" && (edge.from === nodeId || edge.to === nodeId));
 }
 
 function renderGroupedDependencySection(label, edges, targetSelector) {
@@ -2203,22 +2423,22 @@ function renderDependencyGroup(type, edges, targetSelector) {
 }
 
 function dependencyTypeOrder() {
-  return ["constructor", "inheritance", "property", "method", "return-type", "import", "annotation"];
+  return ["constructor", "inheritance", "property", "method", "return-type", "import", "call", "annotation"];
 }
 
 function depChip(edge, id) {
-  const node = data.nodes.find(item => item.id === id);
+  const node = modelNodes().find(item => item.id === id);
   if (!node) return "";
   const meta = analyzerMeta[edge.type] || analyzerMeta.import;
   return `<div class="depChip" data-edge-key="${'$'}{escapeHtml(edgeKey(edge))}"><i class="dot" style="background:${'$'}{layerColors[node.layer]}"></i><span style="flex:1">${'$'}{escapeHtml(node.label)}</span><span class="rowValue">[${'$'}{escapeHtml(meta.abbr)}]</span></div>`;
 }
 
 function findEdgeByKey(key) {
-  return data.edges.find(edge => edgeKey(edge) === key);
+  return modelEdges().find(edge => edgeKey(edge) === key);
 }
 
 function findEdge(from, to, type) {
-  return data.edges.find(edge => edge.from === from && edge.to === to && edge.type === type);
+  return modelEdges().find(edge => edge.from === from && edge.to === to && edge.type === type);
 }
 
 function bindDependencyRows() {
@@ -2301,10 +2521,35 @@ function bindSnapshotControls() {
   });
 }
 
+function bindCallGraphControls() {
+  inspectorEl.querySelectorAll("[data-clear-callgraph]").forEach(button => {
+    button.onclick = event => {
+      event.stopPropagation();
+      clearCallGraphLayer();
+    };
+  });
+}
+
 function clearSnapshot() {
   state.snapshotDiff = null;
   state.snapshotData = null;
   state.snapshotError = "";
+  renderAll();
+}
+
+function clearCallGraphLayer() {
+  state.callGraphLayer = null;
+  state.callGraphError = "";
+  state.selectedEdgeKey = null;
+  state.hoveredEdgeKey = null;
+  state.activeTypes.delete("call");
+  document.getElementById("callGraphToggle").classList.remove("active");
+  document.querySelectorAll("[data-type='call']").forEach(item => {
+    item.disabled = true;
+    item.title = "Load a call graph layer to enable call edges";
+    item.classList.remove("active");
+  });
+  renderFilters();
   renderAll();
 }
 
@@ -2316,7 +2561,8 @@ function renderStatus() {
   const report = data.report || { cycles: [], violations: [] };
   const errors = (report.violations || []).filter(item => item.severity === "error").length;
   const warnings = (report.violations || []).filter(item => item.severity === "warning").length;
-  statusLeft.textContent = `${'$'}{data.summary.classes} classes · ${'$'}{data.summary.dependencies} dependencies · ${'$'}{data.summary.modules} modules · ${'$'}{data.summary.packages} packages · ${'$'}{errors} errors · ${'$'}{warnings} warnings · ${'$'}{(report.cycles || []).length} cycles`;
+  const callGraphText = state.callGraphLayer ? ` · ${'$'}{state.callGraphLayer.edges.length} call edges overlay` : "";
+  statusLeft.textContent = `${'$'}{data.summary.classes} classes · ${'$'}{data.summary.dependencies} dependencies · ${'$'}{data.summary.modules} modules · ${'$'}{data.summary.packages} packages · ${'$'}{errors} errors · ${'$'}{warnings} warnings · ${'$'}{(report.cycles || []).length} cycles${'$'}{callGraphText}`;
 }
 
 function renderAll() {
@@ -2328,12 +2574,13 @@ function renderAll() {
 }
 
 function renderFilters() {
-  fillFilter(filterElements.module, "All Modules", data.nodes.map(node => node.module), state.filters.module);
-  fillFilter(filterElements.sourceSet, "All Source Sets", data.nodes.map(node => node.sourceSet), state.filters.sourceSet);
-  fillFilter(filterElements.pkg, "All Packages", data.nodes.map(node => node.pkg), state.filters.pkg);
-  fillFilter(filterElements.layer, "All Layers", data.nodes.map(node => node.layer), state.filters.layer);
-  fillFilter(filterElements.nodeType, "All Node Types", data.nodes.map(node => node.kind), state.filters.nodeType);
-  fillFilter(filterElements.origin, "All Origins", data.nodes.map(node => node.origin || "DECLARATION"), state.filters.origin);
+  const nodes = modelNodes();
+  fillFilter(filterElements.module, "All Modules", nodes.map(node => node.module), state.filters.module);
+  fillFilter(filterElements.sourceSet, "All Source Sets", nodes.map(node => node.sourceSet), state.filters.sourceSet);
+  fillFilter(filterElements.pkg, "All Packages", nodes.map(node => node.pkg), state.filters.pkg);
+  fillFilter(filterElements.layer, "All Layers", nodes.map(node => node.layer), state.filters.layer);
+  fillFilter(filterElements.nodeType, "All Node Types", nodes.map(node => node.kind), state.filters.nodeType);
+  fillFilter(filterElements.origin, "All Origins", nodes.map(node => node.origin || "DECLARATION"), state.filters.origin);
   fillStaticFilter(
     filterElements.issue,
     "All Issues",
@@ -2382,6 +2629,9 @@ document.querySelectorAll("[data-level]").forEach(button => {
 });
 document.querySelectorAll("[data-type]").forEach(button => {
   button.addEventListener("click", () => {
+    if (button.disabled) {
+      return;
+    }
     const type = button.getAttribute("data-type");
     if (state.activeTypes.has(type)) state.activeTypes.delete(type);
     else state.activeTypes.add(type);
@@ -2400,6 +2650,10 @@ document.getElementById("snapshotToggle").addEventListener("click", event => {
   state.selectedId = null;
   state.selectedEdgeKey = null;
   renderAll();
+});
+document.getElementById("callGraphToggle").addEventListener("click", event => {
+  callGraphInputEl.value = "";
+  callGraphInputEl.click();
 });
 snapshotInputEl.addEventListener("change", event => {
   const file = event.target.files && event.target.files[0];
@@ -2433,6 +2687,42 @@ snapshotInputEl.addEventListener("change", event => {
     state.snapshotError = "Snapshot file could not be read.";
     state.snapshotMode = true;
     document.getElementById("snapshotToggle").classList.add("active");
+    renderAll();
+  };
+  reader.readAsText(file);
+});
+callGraphInputEl.addEventListener("change", event => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const rawCallGraph = JSON.parse(String(reader.result || ""));
+      state.callGraphLayer = normalizeCallGraph(rawCallGraph);
+      state.callGraphError = "";
+      state.activeTypes.add("call");
+      document.querySelectorAll("[data-type='call']").forEach(item => {
+        item.disabled = false;
+        item.title = "Show or hide loaded call graph edges";
+        item.classList.add("active");
+      });
+      document.getElementById("callGraphToggle").classList.add("active");
+      renderFilters();
+    } catch (error) {
+      state.callGraphLayer = null;
+      state.callGraphError = error && error.message ? error.message : "Call graph could not be loaded.";
+      document.getElementById("callGraphToggle").classList.remove("active");
+    }
+    state.selectedId = null;
+    state.selectedEdgeKey = null;
+    renderAll();
+  };
+  reader.onerror = () => {
+    state.callGraphLayer = null;
+    state.callGraphError = "Call graph file could not be read.";
+    document.getElementById("callGraphToggle").classList.remove("active");
     renderAll();
   };
   reader.readAsText(file);

@@ -419,6 +419,87 @@ an error and keeps the current architecture graph unchanged.
 
 ---
 
+# Optional Call Graph Overlay
+
+The static viewer can also load an optional call graph layer from an external
+`architecture-callgraph.json` file.
+
+This is intentionally separate from the KSP structural graph. The default KSP
+processor stays lightweight and continues to generate only structural
+architecture data such as declarations, imports, constructors, properties,
+method parameters, return types, and inheritance.
+
+Typical flow:
+
+1. Generate or obtain an `architecture-callgraph.json` file from an external
+   call graph analyzer.
+2. Open `architecture.html`.
+3. Click `Call Graph`.
+4. Load `architecture-callgraph.json`.
+5. Enable or disable the `Call` edge type in the toolbar.
+
+The viewer merges the call graph layer in memory only:
+
+- base `ViewerData` is not modified
+- base node identity is not recalculated
+- base edge identity is not recalculated
+- `architecture-snapshot.json` is not modified
+- snapshot diff and call graph overlay are fully independent systems
+
+The minimal call graph file shape is:
+
+```json
+{
+  "schemaVersion": 1,
+  "generatedBy": "idiomatic-architecture-viewer-callgraph",
+  "nodes": [
+    {
+      "id": "com.example.UserViewModel.loadUser()",
+      "label": "UserViewModel.loadUser()",
+      "pkg": "com.example",
+      "module": "app",
+      "sourceSet": "commonMain",
+      "file": "UserViewModel.kt",
+      "kind": "function",
+      "layer": "presentation"
+    }
+  ],
+  "edges": [
+    {
+      "from": "com.example.UserViewModel.loadUser()",
+      "to": "com.example.GetUserUseCase.invoke()",
+      "type": "call",
+      "context": "method-body",
+      "snippet": "getUserUseCase.invoke()"
+    }
+  ]
+}
+```
+
+Only the minimum graph data is loaded. The viewer does not store AST, IR,
+method bodies, runtime traces, reflection data, or compiler dumps in the
+snapshot.
+
+Unknown call targets can be represented with stable unresolved ids:
+
+```text
+unresolved:call:externalAnalytics.trackImport
+```
+
+Call graph support is a visualization overlay. It does not currently make the
+KSP processor perform semantic method-body analysis.
+
+For demos, present this as a prepared extension point rather than a completed
+semantic call graph analyzer:
+
+- the main viewer demonstrates structural architecture analysis
+- import dependencies are part of the generated base graph
+- call graph data is loaded as an optional overlay
+- the overlay does not affect base graph identity or snapshot diff
+- a future compiler-level analyzer can produce `architecture-callgraph.json`
+
+---
+
 # Generated Files
 
 Examples:
